@@ -20,8 +20,8 @@ class SpiderpotBuilderApp:
         except: pass
 
         desktop_path = self.get_desktop_path()
-        self.core_script = os.path.join(desktop_path, "Spiderpot_Yakalananlar", "Kodlar", "Spiderpot_Core.py")
         self.build_dir = os.path.dirname(os.path.abspath(__file__))
+        self.core_script = os.path.join(self.build_dir, "Assets", "Spiderpot_Core.py")
         self.selected_wallpaper = os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
 
         main_frame = tk.Frame(root, bg="white")
