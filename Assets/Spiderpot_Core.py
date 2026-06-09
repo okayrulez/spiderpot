@@ -331,7 +331,14 @@ class SpiderpotApp:
             try: self.mouse_listener.stop()
             except: pass
         
-        # Kamerayı stop_system'de kapatmıyoruz (hızlı açılış için hep açık kalıyor)
+        # Kamerayı asenkron kapat ki ışık sönsün ve program kilitlenmesin
+        def _release_cam():
+            if hasattr(self, 'cap') and self.cap is not None:
+                tmp = self.cap
+                self.cap = None
+                try: tmp.release()
+                except: pass
+        threading.Thread(target=_release_cam, daemon=True).start()
 
     def lock_screen(self):
         ctypes.windll.user32.LockWorkStation()
