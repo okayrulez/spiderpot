@@ -197,10 +197,16 @@ class SpiderpotApp:
         # To handle both local and built versions
         self.key_exit = 'f12'
         
-        self.setup_hotkeys()
+        # Kullanıcının seçtiği tuşları çalışma anında çözümle (vk + özel tuş nesnesi)
+        self._resolve_hotkeys()
+        self.last_trigger_time = 0.0
+
         self.setup_tray()
-        
-        self.input_listener = keyboard.Listener(on_press=self.on_input_press)
+
+        # TEK global klavye dinleyicisi: hem açma kısayollarını hem de izinsiz giriş
+        # tuşlarını yakalar. (Eski GlobalHotKeys + ayrı dinleyici ikilisi, tuş-bırakma
+        # olaylarını kaçırıp kısayolu "kilitlediği" için kaldırıldı.)
+        self.input_listener = keyboard.Listener(on_press=self.on_global_press)
         self.input_listener.start()
         
         # Pre-initialize camera silently in background on startup to be extremely fast later
@@ -217,15 +223,53 @@ class SpiderpotApp:
                     self.cap = temp_cap
         except: pass
 
-    def setup_hotkeys(self):
-        hotkeys = {
-            f'<ctrl>+{self.key_spider}': lambda: self.root.after(0, lambda: self.toggle_system('spider')),
-            f'<ctrl>+{self.key_black}': lambda: self.root.after(0, lambda: self.toggle_system('black')),
-            f'<ctrl>+{self.key_lock}': lambda: self.root.after(0, lambda: self.toggle_system('invisible')),
-            f'<{self.key_exit}>': lambda: self.root.after(0, self.stop_system)
+    def _resolve_hotkeys(self):
+        # Mod tuşlarını sanal tuş koduna (vk) çevir. vk; klavye düzeninden ve Ctrl'nin
+        # ürettiği kontrol karakterlerinden (Ctrl+Q -> '\x11' gibi) bağımsız, güvenilir
+        # bir eşleşme verir.
+        def to_vk(ch):
+            try:
+                return ord(str(ch).strip().upper()[0])
+            except Exception:
+                return None
+
+        self.mode_by_vk = {
+            to_vk(self.key_spider): 'spider',
+            to_vk(self.key_black): 'black',
+            to_vk(self.key_lock): 'invisible',
         }
-        self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
-        self.hotkey_listener.start()
+        self.mode_by_vk.pop(None, None)
+        self.mode_by_char = {
+            str(self.key_spider).lower(): 'spider',
+            str(self.key_black).lower(): 'black',
+            str(self.key_lock).lower(): 'invisible',
+        }
+        # Çıkış (kapatma) tuşunu pynput özel tuş nesnesine çevir: f1..f12, esc, end ...
+        self.exit_key = getattr(keyboard.Key, str(self.key_exit).strip().lower(), None)
+
+    def _ctrl_is_down(self):
+        # Ctrl'yi OS'tan anlık oku: pynput'un kaçırdığı tuş-bırakma olayları yüzünden
+        # oluşan "kilitlenmiş modifiye tuş" sorununu tamamen ortadan kaldırır.
+        try:
+            return bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
+        except Exception:
+            return False
+
+    def _match_mode(self, key):
+        vk = getattr(key, 'vk', None)
+        if vk in self.mode_by_vk:
+            return self.mode_by_vk[vk]
+        ch = getattr(key, 'char', None)
+        if ch:
+            c = ch.lower()
+            if c in self.mode_by_char:
+                return self.mode_by_char[c]
+            # Ctrl+harf kontrol karakteri (ör. Ctrl+Q -> '\x11') -> gerçek harfe çevir
+            if len(c) == 1 and ord(c) < 0x20:
+                letter = chr(ord(c) + 96)
+                if letter in self.mode_by_char:
+                    return self.mode_by_char[letter]
+        return None
 
     def setup_tray(self):
         def create_icon_image(color):
@@ -282,19 +326,27 @@ class SpiderpotApp:
     def on_scroll(self, x, y, dx, dy):
         if self.is_active: self.capture_photo()
 
-    def on_input_press(self, key):
-        if self.is_active:
-            if key not in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-                if hasattr(key, 'char') and key.char in ['1', '2', '3']:
-                    pass
-                else:
-                    self.capture_photo()
+    def on_global_press(self, key):
+        # 1) Gizli çıkış (kapatma) tuşu -> her zaman sistemi durdurur.
+        if self.exit_key is not None and key == self.exit_key:
+            self.root.after(0, self.stop_system)
+            return
 
-    def toggle_system(self, mode):
-        if self.is_active and self.active_mode == mode:
-            self.stop_system()
-        else:
-            self.start_system(mode)
+        # 2) Açma kısayolu: Ctrl fiziksel basılıyken bir mod tuşu.
+        #    Mod tuşları SADECE açar / mod değiştirir; ASLA kapatmaz (kapatma = çıkış tuşu).
+        if self._ctrl_is_down():
+            mode = self._match_mode(key)
+            if mode is not None:
+                now = time.time()
+                # Oto-tekrar / çift tetik koruması (sıçrama önleme).
+                if now - self.last_trigger_time >= 0.4:
+                    self.last_trigger_time = now
+                    self.root.after(0, lambda m=mode: self.start_system(m))
+                return  # mod tuşunu izinsiz-giriş tuşu olarak sayma
+
+        # 3) Sistem aktifken diğer her tuş -> izinsiz giriş, fotoğraf çek.
+        if self.is_active and key not in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+            self.capture_photo()
 
     def start_system(self, mode):
         if not self.is_active:
@@ -346,8 +398,8 @@ class SpiderpotApp:
     def real_quit(self):
         allow_sleep()
         self.stop_system()
-        if self.hotkey_listener:
-            try: self.hotkey_listener.stop()
+        if self.input_listener:
+            try: self.input_listener.stop()
             except: pass
         
         # Tamamen çıkarken kamerayı serbest bırak
