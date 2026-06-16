@@ -108,7 +108,7 @@ class SpiderpotViewer:
         for mon in self.monitors:
             win = tk.Toplevel(self.parent)
             win.withdraw()
-            win.overrideredirect(True)
+            # overrideredirect ve -fullscreen çakışıyor, o yüzden sadece -fullscreen kullanıyoruz
             win.geometry(f"{mon.width}x{mon.height}+{mon.x}+{mon.y}")
             win.attributes("-fullscreen", True)
             win.attributes("-topmost", True)
