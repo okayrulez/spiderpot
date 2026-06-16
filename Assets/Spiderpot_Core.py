@@ -24,6 +24,20 @@ def allow_sleep():
         ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
     except: pass
 
+def set_dpi_awareness():
+    # Tk ile screeninfo'nun AYNI (fiziksel piksel) koordinat sistemini kullanmasini saglar.
+    # Aksi halde olceklenmis ekranlarda (orn. %150/%200) tuzak penceresi tum ekrani
+    # kaplamaz; ekranin yalnizca bir kosesinde gorunur. Tk olusturulmadan ONCE cagrilmali.
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 def set_antigravity_mode(active=True):
     try:
         # Check if admin first, otherwise skip to prevent errors/crashes
@@ -133,16 +147,20 @@ class SpiderpotViewer:
             if pil_img_base:
                 img_ratio = pil_img_base.width / pil_img_base.height
                 mon_ratio = mon.width / mon.height
+                # KAPLA (cover): resmi ekrani TAMAMEN dolduracak sekilde olceklendir,
+                # tasan kismi merkezden kirp -> kenarda siyah bosluk birakmadan tam ekran.
                 if img_ratio > mon_ratio:
-                    new_w = mon.width
-                    new_h = int(new_w / img_ratio)
-                else:
                     new_h = mon.height
                     new_w = int(new_h * img_ratio)
-                
-                # Pre-resize and cache
-                resized = pil_img_base.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                self.photo_images[i] = ImageTk.PhotoImage(resized)
+                else:
+                    new_w = mon.width
+                    new_h = int(new_w / img_ratio)
+
+                resized = pil_img_base.resize((max(new_w, 1), max(new_h, 1)), Image.Resampling.LANCZOS)
+                left = max((new_w - mon.width) // 2, 0)
+                top = max((new_h - mon.height) // 2, 0)
+                cropped = resized.crop((left, top, left + mon.width, top + mon.height))
+                self.photo_images[i] = ImageTk.PhotoImage(cropped)
 
     def show_mode(self, mode_spider=True):
         for i, (win, lbl) in enumerate(zip(self.windows, self.labels)):
@@ -412,6 +430,9 @@ class SpiderpotApp:
         sys.exit()
 
 if __name__ == "__main__":
+    # Ekran olceklemesinden (DPI) bagimsiz tam-ekran kaplama icin Tk'den ONCE cagrilir.
+    set_dpi_awareness()
+
     mutex_name = "Global\\Spiderpot_Mutex_Lock"
     mutex = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
     last_error = ctypes.windll.kernel32.GetLastError()
