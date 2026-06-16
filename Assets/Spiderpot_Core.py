@@ -110,6 +110,7 @@ class SpiderpotViewer:
             win.withdraw()
             win.overrideredirect(True)
             win.geometry(f"{mon.width}x{mon.height}+{mon.x}+{mon.y}")
+            win.attributes("-fullscreen", True)
             win.attributes("-topmost", True)
             win.configure(bg='black')
             
