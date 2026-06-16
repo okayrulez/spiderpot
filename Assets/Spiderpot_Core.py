@@ -94,8 +94,26 @@ class SpiderpotViewer:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             
         self.image_path = os.path.join(base_dir, "spiderman3.jpg")
+        self._last_signature = None
+        self.rebuild()
+
+    def _monitor_signature(self):
+        # Mevcut monitor yapisinin parmak izi (degisince pencereleri yenilemek icin).
+        try:
+            return tuple((m.width, m.height, m.x, m.y) for m in get_monitors())
+        except Exception:
+            return None
+
+    def rebuild(self):
+        # Pencereleri GUNCEL monitor yapisina gore (yeniden) olusturur.
         self._create_windows()
         self._preload_images()
+        self._last_signature = self._monitor_signature()
+
+    def ensure_current(self):
+        # Monitorler degistiyse (takma/cikarma/cozunurluk) pencereleri tazele.
+        if self._monitor_signature() != self._last_signature:
+            self.rebuild()
 
     def _create_windows(self):
         for w in self.windows:
@@ -166,6 +184,7 @@ class SpiderpotViewer:
                 self.photo_images[i] = ImageTk.PhotoImage(cropped)
 
     def show_mode(self, mode_spider=True):
+        self.ensure_current()
         for i, (win, lbl) in enumerate(zip(self.windows, self.labels)):
             if mode_spider:
                 if self.photo_images[i]:
