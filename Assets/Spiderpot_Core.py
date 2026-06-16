@@ -122,9 +122,12 @@ class SpiderpotViewer:
         for mon in self.monitors:
             win = tk.Toplevel(self.parent)
             win.withdraw()
-            # overrideredirect ve -fullscreen çakışıyor, o yüzden sadece -fullscreen kullanıyoruz
+            # DPI farkindaligi acik oldugu icin geometri her monitoru fiziksel piksel
+            # olarak TAM kaplar. -fullscreen yerine overrideredirect kullaniyoruz: cok
+            # monitorlu kurulumda her pencere kendi monitorune kesin oturur (-fullscreen
+            # ikincil ekranlarda primary'ye kayabiliyor ve resim boyutuyla uyusmuyor).
+            win.overrideredirect(True)
             win.geometry(f"{mon.width}x{mon.height}+{mon.x}+{mon.y}")
-            win.attributes("-fullscreen", True)
             win.attributes("-topmost", True)
             win.configure(bg='black')
             
