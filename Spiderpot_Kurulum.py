@@ -229,6 +229,15 @@ except: pass
                     desktop_exe = os.path.join(self.get_desktop_path(), "Spiderpot_Sistem.exe")
                     shutil.copy2(exe_path, desktop_exe)
                     
+                    # Başlangıç (Startup) klasörüne kısayol ekle
+                    try:
+                        startup_folder = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+                        shortcut_path = os.path.join(startup_folder, "Spiderpot.lnk")
+                        ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{shortcut_path}');$s.TargetPath='{desktop_exe}';$s.WorkingDirectory='{self.get_desktop_path()}';$s.Save()"
+                        subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    except:
+                        pass
+                    
                     self.root.after(0, self.finish_build, True, desktop_exe)
                 else:
                     self.root.after(0, self.finish_build, False, "EXE bulunamadı.")
