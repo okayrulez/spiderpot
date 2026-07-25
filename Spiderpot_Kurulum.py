@@ -23,6 +23,7 @@ class SpiderpotBuilderApp:
         self.build_dir = os.path.dirname(os.path.abspath(__file__))
         self.core_script = os.path.join(self.build_dir, "Assets", "Spiderpot_Core.py")
         self.selected_wallpaper = os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
+        self.slideshow_dir = os.path.join(self.build_dir, "Assets", "Slayt_Gorselleri")
 
         main_frame = tk.Frame(root, bg="white")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -101,6 +102,14 @@ class SpiderpotBuilderApp:
         self.k3_entry = ttk.Entry(k3_frame, width=5)
         self.k3_entry.insert(0, "3")
         self.k3_entry.pack(side=tk.RIGHT)
+
+        # Slideshow
+        k4_frame = tk.Frame(settings_frame, bg="white")
+        k4_frame.pack(fill=tk.X, pady=2)
+        tk.Label(k4_frame, text="Slayt Ekran Koruyucu Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
+        self.k4_entry = ttk.Entry(k4_frame, width=5)
+        self.k4_entry.insert(0, "4")
+        self.k4_entry.pack(side=tk.RIGHT)
 
         # Exit
         ke_frame = tk.Frame(settings_frame, bg="white")
@@ -184,6 +193,7 @@ class SpiderpotBuilderApp:
             code = code.replace("self.key_spider = '1'", f"self.key_spider = '{self.k1_entry.get().strip().lower()}'")
             code = code.replace("self.key_black = '2'", f"self.key_black = '{self.k2_entry.get().strip().lower()}'")
             code = code.replace("self.key_lock = '3'", f"self.key_lock = '{self.k3_entry.get().strip().lower()}'")
+            code = code.replace("self.key_slideshow = '4'", f"self.key_slideshow = '{self.k4_entry.get().strip().lower()}'")
             code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
 
             # Rename image references internally to the selected image's name so pyinstaller finds it easily
@@ -212,11 +222,12 @@ except: pass
             
             # Asset klasörü
             add_data_arg = f"{self.selected_wallpaper};."
+            slideshow_data_arg = f"{self.slideshow_dir};Slayt_Gorselleri"
             
             cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--noconsole", "--name", "Spiderpot_Sistem"]
             if self.add_icon_var.get() and os.path.exists(icon_path):
                 cmd.append(f"--icon={icon_path}")
-            cmd.extend(["--add-data", add_data_arg])
+            cmd.extend(["--add-data", add_data_arg, "--add-data", slideshow_data_arg])
             cmd.append(temp_script)
             
             result = subprocess.run(cmd, capture_output=True, text=True)

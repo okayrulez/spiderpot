@@ -80,6 +80,10 @@ except ImportError:
     HAS_SCREENINFO = False
 
 class SpiderpotViewer:
+    SLIDESHOW_SECONDS = 5
+    SLIDESHOW_FADE_STEPS = 10
+    SLIDESHOW_FADE_DELAY_MS = 45
+
     def __init__(self, parent):
         self.parent = parent
         self.windows = []
@@ -87,6 +91,12 @@ class SpiderpotViewer:
         self.photo_images = []
         self.monitors = []
         self.is_visible = False
+        self.slideshow_paths = []
+        self.slideshow_index = 0
+        self.slideshow_images = []
+        self.slideshow_current_pil = []
+        self.slideshow_job = None
+        self.slideshow_generation = 0
         
         if getattr(sys, 'frozen', False):
             base_dir = sys._MEIPASS
@@ -94,6 +104,7 @@ class SpiderpotViewer:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             
         self.image_path = os.path.join(base_dir, "spiderman3.jpg")
+        self.slideshow_dir = os.path.join(base_dir, "Slayt_Gorselleri")
         self._last_signature = None
         self.rebuild()
 
@@ -184,6 +195,7 @@ class SpiderpotViewer:
                 self.photo_images[i] = ImageTk.PhotoImage(cropped)
 
     def show_mode(self, mode_spider=True):
+        self.stop_slideshow()
         self.ensure_current()
         for i, (win, lbl) in enumerate(zip(self.windows, self.labels)):
             if mode_spider:
@@ -199,6 +211,7 @@ class SpiderpotViewer:
 
     def show_capture(self, image_path, message="YAKALANDIN!"):
         """Çekilen kamera karesini mesajla birlikte bütün ekranlarda göster."""
+        self.stop_slideshow()
         self.ensure_current()
         try:
             captured = Image.open(image_path).convert("RGB")
@@ -269,7 +282,147 @@ class SpiderpotViewer:
         self.is_visible = True
         return True
 
+    def _cover_for_monitor(self, image, mon):
+        img_ratio = image.width / image.height
+        mon_ratio = mon.width / mon.height
+        if img_ratio > mon_ratio:
+            new_h = mon.height
+            new_w = int(new_h * img_ratio)
+        else:
+            new_w = mon.width
+            new_h = int(new_w / img_ratio)
+
+        resized = image.resize((max(new_w, 1), max(new_h, 1)), Image.Resampling.LANCZOS)
+        left = max((new_w - mon.width) // 2, 0)
+        top = max((new_h - mon.height) // 2, 0)
+        return resized.crop((left, top, left + mon.width, top + mon.height)).convert("RGB")
+
+    def _load_slideshow_paths(self):
+        supported = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+        try:
+            names = sorted(os.listdir(self.slideshow_dir), key=str.casefold)
+        except Exception:
+            return []
+        return [
+            os.path.join(self.slideshow_dir, name)
+            for name in names
+            if os.path.splitext(name)[1].lower() in supported
+            and os.path.isfile(os.path.join(self.slideshow_dir, name))
+        ]
+
+    def start_slideshow(self):
+        self.stop_slideshow()
+        self.ensure_current()
+        self.slideshow_paths = self._load_slideshow_paths()
+        self.slideshow_index = 0
+        self.slideshow_current_pil = []
+        self.slideshow_generation += 1
+        generation = self.slideshow_generation
+
+        if not self.slideshow_paths:
+            for win, lbl in zip(self.windows, self.labels):
+                lbl.config(
+                    image="",
+                    text="Slayt görseli bulunamadı\nSlayt_Gorselleri klasörüne resim ekleyin",
+                    fg="white",
+                    bg="black",
+                    font=("Segoe UI", 24, "bold"),
+                    justify="center",
+                )
+                win.deiconify()
+            self.is_visible = True
+            return False
+
+        self._show_slideshow_image(generation, fade=False)
+        return True
+
+    def _show_slideshow_image(self, generation, fade=True):
+        if generation != self.slideshow_generation or not self.slideshow_paths:
+            return
+
+        path = self.slideshow_paths[self.slideshow_index]
+        try:
+            with Image.open(path) as source:
+                source = source.convert("RGB")
+                next_images = [
+                    self._cover_for_monitor(source, mon)
+                    for mon in self.monitors
+                ]
+        except Exception:
+            self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_paths)
+            self.slideshow_job = self.parent.after(
+                100,
+                lambda: self._show_slideshow_image(generation, fade=False),
+            )
+            return
+
+        if fade and len(self.slideshow_current_pil) == len(next_images):
+            self._fade_slideshow(generation, self.slideshow_current_pil, next_images, 1)
+        else:
+            self._set_slideshow_images(next_images)
+            self.slideshow_current_pil = next_images
+            self.slideshow_job = self.parent.after(
+                self.SLIDESHOW_SECONDS * 1000,
+                lambda: self._advance_slideshow(generation),
+            )
+
+    def _set_slideshow_images(self, pil_images):
+        photos = []
+        for win, lbl, image in zip(self.windows, self.labels, pil_images):
+            photo = ImageTk.PhotoImage(image)
+            photos.append(photo)
+            lbl.config(image=photo, text="", bg="black")
+            win.deiconify()
+        self.slideshow_images = photos
+        self.is_visible = True
+
+    def _fade_slideshow(self, generation, old_images, next_images, step):
+        if generation != self.slideshow_generation:
+            return
+
+        alpha = step / self.SLIDESHOW_FADE_STEPS
+        blended = [
+            Image.blend(old, new, alpha)
+            for old, new in zip(old_images, next_images)
+        ]
+        self._set_slideshow_images(blended)
+
+        if step < self.SLIDESHOW_FADE_STEPS:
+            self.slideshow_job = self.parent.after(
+                self.SLIDESHOW_FADE_DELAY_MS,
+                lambda: self._fade_slideshow(
+                    generation,
+                    old_images,
+                    next_images,
+                    step + 1,
+                ),
+            )
+        else:
+            self.slideshow_current_pil = next_images
+            self.slideshow_job = self.parent.after(
+                self.SLIDESHOW_SECONDS * 1000,
+                lambda: self._advance_slideshow(generation),
+            )
+
+    def _advance_slideshow(self, generation):
+        if generation != self.slideshow_generation or not self.slideshow_paths:
+            return
+        self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_paths)
+        self._show_slideshow_image(generation, fade=True)
+
+    def stop_slideshow(self):
+        self.slideshow_generation += 1
+        if self.slideshow_job is not None:
+            try:
+                self.parent.after_cancel(self.slideshow_job)
+            except Exception:
+                pass
+            self.slideshow_job = None
+        self.slideshow_images = []
+        self.slideshow_current_pil = []
+
     def hide(self):
+        self.stop_slideshow()
         for win in self.windows:
             try: win.withdraw()
             except: pass
@@ -308,6 +461,7 @@ class SpiderpotApp:
         self.key_spider = '1'
         self.key_black = '2'
         self.key_lock = '3'
+        self.key_slideshow = '4'
         # To handle both local and built versions
         self.key_exit = 'f12'
         
@@ -351,12 +505,14 @@ class SpiderpotApp:
             to_vk(self.key_spider): 'spider',
             to_vk(self.key_black): 'black',
             to_vk(self.key_lock): 'invisible',
+            to_vk(self.key_slideshow): 'slideshow',
         }
         self.mode_by_vk.pop(None, None)
         self.mode_by_char = {
             str(self.key_spider).lower(): 'spider',
             str(self.key_black).lower(): 'black',
             str(self.key_lock).lower(): 'invisible',
+            str(self.key_slideshow).lower(): 'slideshow',
         }
         # Çıkış (kapatma) tuşunu pynput özel tuş nesnesine çevir: f1..f12, esc, end ...
         self.exit_key = getattr(keyboard.Key, str(self.key_exit).strip().lower(), None)
@@ -458,6 +614,8 @@ class SpiderpotApp:
             self.viewer.hide()
         elif self.active_mode == 'invisible':
             self.viewer.hide()
+        elif self.active_mode == 'slideshow':
+            self.viewer.start_slideshow()
         else:
             self.viewer.show_mode(mode_spider=(self.active_mode == 'spider'))
 
@@ -510,6 +668,8 @@ class SpiderpotApp:
         self.update_tray_icon()
         if mode == 'invisible':
             self.viewer.hide()
+        elif mode == 'slideshow':
+            self.viewer.start_slideshow()
         else:
             self.viewer.show_mode(mode_spider=(mode=='spider'))
 

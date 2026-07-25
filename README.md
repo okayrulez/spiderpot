@@ -4,9 +4,9 @@
 
 Bu yazılım tamamen arka planda görünmez olarak çalışır ve siz yoksayken bilgisayarınıza dokunanları anında tespit edip fotoğrafını çeker. Ayrıca ekranı anında kitleyen komik modlara sahiptir.
 
-## 🚀 3 Harika İşlev (Mod)
+## 🚀 4 Harika İşlev (Mod)
 
-Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 3 farklı çalışma modu vardır:
+Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 4 farklı çalışma modu vardır:
 
 ### 1. Görünmez Tuzak Modu (Honeypot) 📸
 * **Kısayol:** `Ctrl + 3` (veya belirlediğiniz kısayol)
@@ -26,11 +26,19 @@ Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 3 farklı çalış
 * Bilgisayar kapalıymış veya bozulmuş gibi görünür. Fişini çekmeye çalışmalarını izleyebilirsiniz!
 * Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından siyah ekrana geri dönülür.
 
+### 4. Slayt Ekran Koruyucu Modu 🎞️
+* **Kısayol:** `Ctrl + 4` (veya belirlediğiniz kısayol)
+* `Assets/Slayt_Gorselleri` klasöründeki JPG, JPEG, PNG, BMP ve WebP görsellerini dosya adına göre sırayla oynatır.
+* Her görsel ekranda **5 saniye** kalır; sonraki görsele yumuşak bir geçişle geçilir ve tüm monitörler tam ekran kaplanır.
+* Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından slayt gösterisi yeniden başlar.
+
 ## 🛑 Kapatma / İptal
 Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğiniz bir **Gizli Çıkış Kısayolu** (Örn: `F12` veya `Ctrl+E`) bulunur. Bu tuşa basılana kadar sistem asla açılamaz!
 
 ## 🛠️ Nasıl Kurulur?
-`Spiderpot_Builder` içerisindeki `Spiderpot_Kurulum.py` arayüzünü çalıştırarak kendi kısayol tuşlarınızı belirleyebilir, istediğiniz resmi seçebilir ve sadece tek tıklamayla kendi `Spiderpot_Sistem.exe`'nizi anında derleyebilirsiniz!
+1. Slaytta kullanmak istediğiniz görselleri `Assets/Slayt_Gorselleri` klasörüne kopyalayın.
+2. `Spiderpot_Kurulum.py` arayüzünü çalıştırarak kendi kısayol tuşlarınızı belirleyin ve istediğiniz Spider duvar kağıdını seçin.
+3. **Kurulumu Başlat** düğmesine basarak görsellerle birlikte tek dosyalık `Spiderpot_Sistem.exe` uygulamasını derleyin.
 
 ---
 *Not: Bu yazılım tamamen şaka ve ofis içi eğlence/güvenlik amacıyla geliştirilmiştir. Çok ciddiye almayınız!*
