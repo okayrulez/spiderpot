@@ -8,7 +8,7 @@ import sys
 import winreg
 import tkinter as tk
 import threading
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
@@ -197,6 +197,78 @@ class SpiderpotViewer:
             win.deiconify()
         self.is_visible = True
 
+    def show_capture(self, image_path, message="YAKALANDIN!"):
+        """Çekilen kamera karesini mesajla birlikte bütün ekranlarda göster."""
+        self.ensure_current()
+        try:
+            captured = Image.open(image_path).convert("RGB")
+        except Exception:
+            return False
+
+        capture_images = []
+        for win, lbl, mon in zip(self.windows, self.labels, self.monitors):
+            img_ratio = captured.width / captured.height
+            mon_ratio = mon.width / mon.height
+            if img_ratio > mon_ratio:
+                new_h = mon.height
+                new_w = int(new_h * img_ratio)
+            else:
+                new_w = mon.width
+                new_h = int(new_w / img_ratio)
+
+            resized = captured.resize((max(new_w, 1), max(new_h, 1)), Image.Resampling.LANCZOS)
+            left = max((new_w - mon.width) // 2, 0)
+            top = max((new_h - mon.height) // 2, 0)
+            screen_image = resized.crop((left, top, left + mon.width, top + mon.height)).convert("RGBA")
+
+            overlay = Image.new("RGBA", screen_image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            font_size = max(44, int(mon.height * 0.10))
+            try:
+                font = ImageFont.truetype("arialbd.ttf", font_size)
+            except Exception:
+                font = ImageFont.load_default()
+
+            bbox = draw.textbbox((0, 0), message, font=font, stroke_width=2)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            padding_x = max(30, int(mon.width * 0.025))
+            padding_y = max(20, int(mon.height * 0.02))
+            x = (mon.width - text_w) // 2
+            y = max(30, int(mon.height * 0.08))
+            banner = (
+                x - padding_x,
+                y - padding_y,
+                x + text_w + padding_x,
+                y + text_h + padding_y,
+            )
+            draw.rounded_rectangle(
+                banner,
+                radius=max(18, int(font_size * 0.25)),
+                fill=(0, 0, 0, 190),
+                outline=(255, 35, 35, 255),
+                width=max(4, int(font_size * 0.06)),
+            )
+            draw.text(
+                (x, y),
+                message,
+                font=font,
+                fill=(255, 45, 45, 255),
+                stroke_width=2,
+                stroke_fill=(255, 255, 255, 255),
+            )
+
+            composed = Image.alpha_composite(screen_image, overlay).convert("RGB")
+            photo = ImageTk.PhotoImage(composed)
+            capture_images.append(photo)
+            lbl.config(image=photo, text="")
+            win.deiconify()
+
+        # Tk PhotoImage nesneleri referans tutulmazsa ekrandan silinir.
+        self.capture_images = capture_images
+        self.is_visible = True
+        return True
+
     def hide(self):
         for win in self.windows:
             try: win.withdraw()
@@ -205,7 +277,6 @@ class SpiderpotViewer:
 
 import pystray
 from pystray import MenuItem as TrayItem
-from PIL import ImageDraw
 
 class SpiderpotApp:
     def __init__(self, root):
@@ -217,7 +288,9 @@ class SpiderpotApp:
         
         self.cap = None
         self.last_capture_time = 0
-        self.cooldown_seconds = 1
+        self.cooldown_seconds = 3
+        self.capture_feedback_ms = 3000
+        self.capture_feedback_job = None
         self.camera_port = 0
         self.capture_lock = threading.Lock()
         
@@ -344,6 +417,7 @@ class SpiderpotApp:
             self.tray_icon.title = f"Spiderpot ({status})"
 
     def capture_photo(self):
+        captured_path = None
         with self.capture_lock:
             current_time = time.time()
             if current_time - self.last_capture_time < self.cooldown_seconds:
@@ -355,8 +429,37 @@ class SpiderpotApp:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"yakalandin_{timestamp}.jpg"
                     filepath = os.path.join(self.save_folder, filename)
-                    cv2.imwrite(filepath, frame)
-                    self.last_capture_time = current_time
+                    if cv2.imwrite(filepath, frame):
+                        self.last_capture_time = current_time
+                        captured_path = filepath
+
+        if captured_path:
+            self.root.after(0, lambda path=captured_path: self._show_capture_feedback(path))
+
+    def _show_capture_feedback(self, image_path):
+        if not self.is_active:
+            return
+        if not self.viewer.show_capture(image_path):
+            return
+
+        if self.capture_feedback_job is not None:
+            try:
+                self.root.after_cancel(self.capture_feedback_job)
+            except Exception:
+                pass
+        self.capture_feedback_job = self.root.after(
+            self.capture_feedback_ms,
+            self._restore_active_mode,
+        )
+
+    def _restore_active_mode(self):
+        self.capture_feedback_job = None
+        if not self.is_active:
+            self.viewer.hide()
+        elif self.active_mode == 'invisible':
+            self.viewer.hide()
+        else:
+            self.viewer.show_mode(mode_spider=(self.active_mode == 'spider'))
 
     def on_move(self, x, y):
         if self.is_active: self.capture_photo()
@@ -414,6 +517,12 @@ class SpiderpotApp:
         if not self.is_active: return
         self.is_active = False
         self.active_mode = None
+        if self.capture_feedback_job is not None:
+            try:
+                self.root.after_cancel(self.capture_feedback_job)
+            except Exception:
+                pass
+            self.capture_feedback_job = None
         self.update_tray_icon()
         self.viewer.hide()
         
