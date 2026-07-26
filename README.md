@@ -4,9 +4,9 @@
 
 Bu yazılım tamamen arka planda görünmez olarak çalışır ve siz yoksayken bilgisayarınıza dokunanları anında tespit edip fotoğrafını çeker. Ayrıca ekranı anında kitleyen komik modlara sahiptir.
 
-## 🚀 4 Harika İşlev (Mod)
+## 🚀 3 Harika İşlev (Mod)
 
-Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 4 farklı çalışma modu vardır:
+Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 3 farklı çalışma modu vardır:
 
 ### 1. Görünmez Tuzak Modu (Honeypot) 📸
 * **Kısayol:** `Ctrl + 3` (veya belirlediğiniz kısayol)
@@ -17,20 +17,15 @@ Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 4 farklı çalış
 ### 2. Örümcek Modu 🕸️
 * **Kısayol:** `Ctrl + 1` (veya belirlediğiniz kısayol)
 * Biri bilgisayarınıza dokunduğu anda ekran anında donar, tüm Windows kısayolları (Ctrl+Alt+Del, Alt+Tab, Windows tuşu) devre dışı bırakılır ve fareniz kilitlenir.
-* Ekranda devasa bir **Spider-Man Noir** resmi belirir ve bilgisayarınız kullanılamaz hale gelir!
-* Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından Spider-Man ekranına geri dönülür.
+* Kurulumda seçilen ana duvar kâğıdıyla `Assets/Slayt_Gorselleri` klasöründeki görseller tam ekran gösterilir.
+* Tek görsel varsa sabit kalır; birden fazla görsel varsa dosya adına göre sıralanır, her biri **5 saniye** kalır ve aralarında yumuşak geçiş yapılır.
+* Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından duvar kâğıdı akışına geri dönülür.
 
 ### 3. Siyah Ekran Modu ⬛
 * **Kısayol:** `Ctrl + 2` (veya belirlediğiniz kısayol)
 * "Örümcek Modu" ile aynı koruma mekanizmalarına sahiptir ancak ekrana resim koymak yerine tüm ekranı **tamamen siyah** yapar.
 * Bilgisayar kapalıymış veya bozulmuş gibi görünür. Fişini çekmeye çalışmalarını izleyebilirsiniz!
 * Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından siyah ekrana geri dönülür.
-
-### 4. Slayt Ekran Koruyucu Modu 🎞️
-* **Kısayol:** `Ctrl + 4` (veya belirlediğiniz kısayol)
-* `Assets/Slayt_Gorselleri` klasöründeki JPG, JPEG, PNG, BMP ve WebP görsellerini dosya adına göre sırayla oynatır.
-* Her görsel ekranda **5 saniye** kalır; sonraki görsele yumuşak bir geçişle geçilir ve tüm monitörler tam ekran kaplanır.
-* Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından slayt gösterisi yeniden başlar.
 
 ## 🛑 Kapatma / İptal
 Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğiniz bir **Gizli Çıkış Kısayolu** (Örn: `F12` veya `Ctrl+E`) bulunur. Bu tuşa basılana kadar sistem asla açılamaz!

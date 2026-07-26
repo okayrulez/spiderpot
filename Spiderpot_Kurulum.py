@@ -103,14 +103,6 @@ class SpiderpotBuilderApp:
         self.k3_entry.insert(0, "3")
         self.k3_entry.pack(side=tk.RIGHT)
 
-        # Slideshow
-        k4_frame = tk.Frame(settings_frame, bg="white")
-        k4_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k4_frame, text="Slayt Ekran Koruyucu Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k4_entry = ttk.Entry(k4_frame, width=5)
-        self.k4_entry.insert(0, "4")
-        self.k4_entry.pack(side=tk.RIGHT)
-
         # Exit
         ke_frame = tk.Frame(settings_frame, bg="white")
         ke_frame.pack(fill=tk.X, pady=2)
@@ -265,7 +257,6 @@ class SpiderpotBuilderApp:
             code = code.replace("self.key_spider = '1'", f"self.key_spider = '{self.k1_entry.get().strip().lower()}'")
             code = code.replace("self.key_black = '2'", f"self.key_black = '{self.k2_entry.get().strip().lower()}'")
             code = code.replace("self.key_lock = '3'", f"self.key_lock = '{self.k3_entry.get().strip().lower()}'")
-            code = code.replace("self.key_slideshow = '4'", f"self.key_slideshow = '{self.k4_entry.get().strip().lower()}'")
             code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
 
             # Rename image references internally to the selected image's name so pyinstaller finds it easily

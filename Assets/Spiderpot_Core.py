@@ -195,17 +195,13 @@ class SpiderpotViewer:
                 self.photo_images[i] = ImageTk.PhotoImage(cropped)
 
     def show_mode(self, mode_spider=True):
+        if mode_spider:
+            return self.start_slideshow()
+
         self.stop_slideshow()
         self.ensure_current()
-        for i, (win, lbl) in enumerate(zip(self.windows, self.labels)):
-            if mode_spider:
-                if self.photo_images[i]:
-                    lbl.config(image=self.photo_images[i])
-                else:
-                    lbl.config(text="Wallpaper Bulunamadı!", fg="white", font=("Arial", 24))
-            else:
-                lbl.config(image='', text="")
-            
+        for win, lbl in zip(self.windows, self.labels):
+            lbl.config(image='', text="")
             win.deiconify()
         self.is_visible = True
 
@@ -299,16 +295,30 @@ class SpiderpotViewer:
 
     def _load_slideshow_paths(self):
         supported = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+        paths = []
+
+        # Kurulum ekranında seçilen ana duvar kâğıdı her zaman ilk görseldir.
+        if (
+            os.path.isfile(self.image_path)
+            and os.path.splitext(self.image_path)[1].lower() in supported
+        ):
+            paths.append(self.image_path)
+
         try:
             names = sorted(os.listdir(self.slideshow_dir), key=str.casefold)
         except Exception:
-            return []
-        return [
-            os.path.join(self.slideshow_dir, name)
-            for name in names
-            if os.path.splitext(name)[1].lower() in supported
-            and os.path.isfile(os.path.join(self.slideshow_dir, name))
-        ]
+            names = []
+
+        main_name = os.path.basename(self.image_path).casefold()
+        for name in names:
+            path = os.path.join(self.slideshow_dir, name)
+            if (
+                os.path.splitext(name)[1].lower() in supported
+                and os.path.isfile(path)
+                and name.casefold() != main_name
+            ):
+                paths.append(path)
+        return paths
 
     def start_slideshow(self):
         self.stop_slideshow()
@@ -323,7 +333,7 @@ class SpiderpotViewer:
             for win, lbl in zip(self.windows, self.labels):
                 lbl.config(
                     image="",
-                    text="Slayt görseli bulunamadı\nSlayt_Gorselleri klasörüne resim ekleyin",
+                    text="Duvar kâğıdı bulunamadı",
                     fg="white",
                     bg="black",
                     font=("Segoe UI", 24, "bold"),
@@ -361,10 +371,12 @@ class SpiderpotViewer:
         else:
             self._set_slideshow_images(next_images)
             self.slideshow_current_pil = next_images
-            self.slideshow_job = self.parent.after(
-                self.SLIDESHOW_SECONDS * 1000,
-                lambda: self._advance_slideshow(generation),
-            )
+            # Tek görsel varsa sabit duvar kâğıdı olarak ekranda kalır.
+            if len(self.slideshow_paths) > 1:
+                self.slideshow_job = self.parent.after(
+                    self.SLIDESHOW_SECONDS * 1000,
+                    lambda: self._advance_slideshow(generation),
+                )
 
     def _set_slideshow_images(self, pil_images):
         photos = []
@@ -399,10 +411,11 @@ class SpiderpotViewer:
             )
         else:
             self.slideshow_current_pil = next_images
-            self.slideshow_job = self.parent.after(
-                self.SLIDESHOW_SECONDS * 1000,
-                lambda: self._advance_slideshow(generation),
-            )
+            if len(self.slideshow_paths) > 1:
+                self.slideshow_job = self.parent.after(
+                    self.SLIDESHOW_SECONDS * 1000,
+                    lambda: self._advance_slideshow(generation),
+                )
 
     def _advance_slideshow(self, generation):
         if generation != self.slideshow_generation or not self.slideshow_paths:
@@ -461,7 +474,6 @@ class SpiderpotApp:
         self.key_spider = '1'
         self.key_black = '2'
         self.key_lock = '3'
-        self.key_slideshow = '4'
         # To handle both local and built versions
         self.key_exit = 'f12'
         
@@ -505,14 +517,12 @@ class SpiderpotApp:
             to_vk(self.key_spider): 'spider',
             to_vk(self.key_black): 'black',
             to_vk(self.key_lock): 'invisible',
-            to_vk(self.key_slideshow): 'slideshow',
         }
         self.mode_by_vk.pop(None, None)
         self.mode_by_char = {
             str(self.key_spider).lower(): 'spider',
             str(self.key_black).lower(): 'black',
             str(self.key_lock).lower(): 'invisible',
-            str(self.key_slideshow).lower(): 'slideshow',
         }
         # Çıkış (kapatma) tuşunu pynput özel tuş nesnesine çevir: f1..f12, esc, end ...
         self.exit_key = getattr(keyboard.Key, str(self.key_exit).strip().lower(), None)
@@ -614,8 +624,6 @@ class SpiderpotApp:
             self.viewer.hide()
         elif self.active_mode == 'invisible':
             self.viewer.hide()
-        elif self.active_mode == 'slideshow':
-            self.viewer.start_slideshow()
         else:
             self.viewer.show_mode(mode_spider=(self.active_mode == 'spider'))
 
@@ -668,8 +676,6 @@ class SpiderpotApp:
         self.update_tray_icon()
         if mode == 'invisible':
             self.viewer.hide()
-        elif mode == 'slideshow':
-            self.viewer.start_slideshow()
         else:
             self.viewer.show_mode(mode_spider=(mode=='spider'))
 
