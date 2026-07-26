@@ -5,6 +5,7 @@ import subprocess
 import threading
 import sys
 import shutil
+import tempfile
 
 class SpiderpotBuilderApp:
     def __init__(self, root):
@@ -22,7 +23,9 @@ class SpiderpotBuilderApp:
         desktop_path = self.get_desktop_path()
         self.build_dir = os.path.dirname(os.path.abspath(__file__))
         self.core_script = os.path.join(self.build_dir, "Assets", "Spiderpot_Core.py")
-        self.selected_wallpaper = os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
+        self.selected_wallpapers = [
+            os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
+        ]
         self.slideshow_dir = os.path.join(self.build_dir, "Assets", "Slayt_Gorselleri")
 
         main_frame = tk.Frame(root, bg="white")
@@ -69,10 +72,10 @@ class SpiderpotBuilderApp:
         # 1. Wallpaper Selection
         wp_frame = tk.Frame(settings_frame, bg="white")
         wp_frame.pack(fill=tk.X, pady=5)
-        tk.Label(wp_frame, text="Tuzak Wallpaper Seç:", font=("Segoe UI", 10, "bold"), bg="white").pack(side=tk.LEFT)
-        self.lbl_wp = tk.Label(wp_frame, text="spiderman3.jpg", font=("Segoe UI", 9), bg="white", fg="blue", width=25, anchor="e")
+        tk.Label(wp_frame, text="Ctrl+1 Görselleri:", font=("Segoe UI", 10, "bold"), bg="white").pack(side=tk.LEFT)
+        self.lbl_wp = tk.Label(wp_frame, text="1 görsel seçildi", font=("Segoe UI", 9), bg="white", fg="blue", width=22, anchor="e")
         self.lbl_wp.pack(side=tk.LEFT, padx=5)
-        tk.Button(wp_frame, text="Gözat", command=self.browse_wallpaper, height=1, relief="groove").pack(side=tk.RIGHT)
+        tk.Button(wp_frame, text="Çoklu Seç", command=self.browse_wallpaper, height=1, relief="groove").pack(side=tk.RIGHT)
         
         ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
 
@@ -155,13 +158,17 @@ class SpiderpotBuilderApp:
             return os.path.join(os.path.expanduser("~"), "Desktop")
 
     def browse_wallpaper(self):
-        filepath = filedialog.askopenfilename(title="Wallpaper Seç", filetypes=[("Resim Dosyaları", "*.jpg *.jpeg *.png *.bmp")])
-        if filepath:
-            self.selected_wallpaper = filepath
-            filename = os.path.basename(filepath)
-            # Kısalt
-            if len(filename) > 20: filename = filename[:17] + "..."
-            self.lbl_wp.config(text=filename)
+        filepaths = filedialog.askopenfilenames(
+            title="Ctrl+1 için istediğiniz tüm görselleri seçin",
+            filetypes=[
+                ("Resim Dosyaları", "*.jpg *.jpeg *.png *.bmp *.webp"),
+                ("Tüm Dosyalar", "*.*"),
+            ],
+        )
+        if filepaths:
+            self.selected_wallpapers = list(filepaths)
+            count = len(self.selected_wallpapers)
+            self.lbl_wp.config(text=f"{count} görsel seçildi")
 
     def start_build(self):
         self._begin_build(install_locally=True)
@@ -183,8 +190,17 @@ class SpiderpotBuilderApp:
             messagebox.showerror("Hata", f"Kaynak kod bulunamadı!\n{self.core_script}")
             return
             
-        if not os.path.exists(self.selected_wallpaper):
-            messagebox.showerror("Hata", f"Seçilen duvar kağıdı bulunamadı!\n{self.selected_wallpaper}")
+        missing_wallpapers = [
+            path for path in self.selected_wallpapers
+            if not os.path.exists(path)
+        ]
+        if not self.selected_wallpapers or missing_wallpapers:
+            missing_text = "\n".join(missing_wallpapers[:5])
+            messagebox.showerror(
+                "Hata",
+                "Seçilen görsellerden bazıları bulunamadı!"
+                + (f"\n{missing_text}" if missing_text else ""),
+            )
             return
 
         self.btn_build.config(state=tk.DISABLED)
@@ -201,6 +217,8 @@ class SpiderpotBuilderApp:
         ).start()
 
     def build_exe(self, install_locally=True, output_path=None):
+        temp_script = None
+        slideshow_stage_dir = None
         try:
             desktop_path = self.get_desktop_path()
 
@@ -260,7 +278,8 @@ class SpiderpotBuilderApp:
             code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
 
             # Rename image references internally to the selected image's name so pyinstaller finds it easily
-            selected_filename = os.path.basename(self.selected_wallpaper)
+            selected_wallpaper = self.selected_wallpapers[0]
+            selected_filename = os.path.basename(selected_wallpaper)
             code = code.replace("spiderman3.jpg", selected_filename)
 
             if self.auto_start_var.get():
@@ -278,22 +297,54 @@ except: pass
             with open(temp_script, "w", encoding="utf-8") as f:
                 f.write(code)
 
-            os.chdir(self.build_dir)
-            
             # Use the perfect transparent icon from Assets folder
             icon_path = os.path.join(self.build_dir, "Assets", "spider_noir_icon.ico")
             
-            # Asset klasörü
-            add_data_arg = f"{self.selected_wallpaper};."
-            slideshow_data_arg = f"{self.slideshow_dir};Slayt_Gorselleri"
+            # İlk seçilen görsel ana wallpaper olarak, diğerleri ise Ctrl+1 akışına
+            # sıralı ve benzersiz adlarla paketlenir.
+            add_data_arg = f"{selected_wallpaper};."
+            slideshow_stage_dir = tempfile.mkdtemp(
+                prefix="Spiderpot_Slayt_",
+                dir=self.build_dir,
+            )
+            selected_normalized = {
+                os.path.normcase(os.path.abspath(path))
+                for path in self.selected_wallpapers
+            }
+
+            for index, path in enumerate(self.selected_wallpapers[1:], start=1):
+                staged_name = f"{index:04d}_{os.path.basename(path)}"
+                shutil.copy2(path, os.path.join(slideshow_stage_dir, staged_name))
+
+            supported = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+            folder_index = len(self.selected_wallpapers)
+            if os.path.isdir(self.slideshow_dir):
+                for name in sorted(os.listdir(self.slideshow_dir), key=str.casefold):
+                    source = os.path.join(self.slideshow_dir, name)
+                    if (
+                        os.path.isfile(source)
+                        and os.path.splitext(name)[1].lower() in supported
+                        and os.path.normcase(os.path.abspath(source)) not in selected_normalized
+                    ):
+                        staged_name = f"{folder_index:04d}_{name}"
+                        shutil.copy2(source, os.path.join(slideshow_stage_dir, staged_name))
+                        folder_index += 1
             
             cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--noconsole", "--name", "Spiderpot_Sistem"]
             if self.add_icon_var.get() and os.path.exists(icon_path):
                 cmd.append(f"--icon={icon_path}")
-            cmd.extend(["--add-data", add_data_arg, "--add-data", slideshow_data_arg])
+            cmd.extend(["--add-data", add_data_arg])
+            if os.listdir(slideshow_stage_dir):
+                slideshow_data_arg = f"{slideshow_stage_dir};Slayt_Gorselleri"
+                cmd.extend(["--add-data", slideshow_data_arg])
             cmd.append(temp_script)
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.build_dir,
+            )
 
             if result.returncode == 0:
                 dist_dir = os.path.join(self.build_dir, "dist")
@@ -329,11 +380,19 @@ except: pass
             else:
                 self.root.after(0, self.finish_build, False, result.stderr, install_locally)
                 
-            try: os.remove(temp_script)
-            except: pass
-            
         except Exception as e:
             self.root.after(0, self.finish_build, False, str(e), install_locally)
+        finally:
+            if temp_script and os.path.exists(temp_script):
+                try:
+                    os.remove(temp_script)
+                except:
+                    pass
+            if slideshow_stage_dir and os.path.isdir(slideshow_stage_dir):
+                try:
+                    shutil.rmtree(slideshow_stage_dir)
+                except:
+                    pass
 
     def finish_build(self, success, message, install_locally=True):
         self.btn_build.config(state=tk.NORMAL)

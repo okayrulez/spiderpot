@@ -31,8 +31,8 @@ Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 3 farklı çalış
 Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğiniz bir **Gizli Çıkış Kısayolu** (Örn: `F12` veya `Ctrl+E`) bulunur. Bu tuşa basılana kadar sistem asla açılamaz!
 
 ## 🛠️ Nasıl Kurulur?
-1. Slaytta kullanmak istediğiniz görselleri `Assets/Slayt_Gorselleri` klasörüne kopyalayın.
-2. `Spiderpot_Kurulum.py` arayüzünü çalıştırarak kendi kısayol tuşlarınızı belirleyin ve istediğiniz Spider duvar kağıdını seçin.
+1. `Spiderpot_Kurulum.py` arayüzündeki **Çoklu Seç** düğmesine basın; `Ctrl+A`, `Ctrl` veya `Shift` kullanarak istediğiniz sayıda Ctrl+1 görseli seçin.
+2. İlk seçilen görsel başlangıç duvar kâğıdı olur; diğerleri seçilen sırayla 5 saniyelik akışa eklenir. İsterseniz `Assets/Slayt_Gorselleri` klasörüne ayrıca görsel de kopyalayabilirsiniz.
 3. **Bu PC'ye Kur** düğmesi mevcut yerel Spiderpot'u yeniler, başlangıç ayarını uygular ve yeni EXE'yi çalıştırır.
 4. **Başka PC İçin EXE Üret** düğmesi ise mevcut kuruluma dokunmadan kayıt yerini seçtiğiniz tek dosyalık bir EXE üretir; dosyayı çalıştırmaz ve bu bilgisayara başlangıç kaydı eklemez.
 
