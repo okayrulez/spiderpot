@@ -38,7 +38,8 @@ Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğin
 ## 🛠️ Nasıl Kurulur?
 1. Slaytta kullanmak istediğiniz görselleri `Assets/Slayt_Gorselleri` klasörüne kopyalayın.
 2. `Spiderpot_Kurulum.py` arayüzünü çalıştırarak kendi kısayol tuşlarınızı belirleyin ve istediğiniz Spider duvar kağıdını seçin.
-3. **Kurulumu Başlat** düğmesine basarak görsellerle birlikte tek dosyalık `Spiderpot_Sistem.exe` uygulamasını derleyin.
+3. **Bu PC'ye Kur** düğmesi mevcut yerel Spiderpot'u yeniler, başlangıç ayarını uygular ve yeni EXE'yi çalıştırır.
+4. **Başka PC İçin EXE Üret** düğmesi ise mevcut kuruluma dokunmadan kayıt yerini seçtiğiniz tek dosyalık bir EXE üretir; dosyayı çalıştırmaz ve bu bilgisayara başlangıç kaydı eklemez.
 
 ---
 *Not: Bu yazılım tamamen şaka ve ofis içi eğlence/güvenlik amacıyla geliştirilmiştir. Çok ciddiye almayınız!*

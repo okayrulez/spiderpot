@@ -131,8 +131,23 @@ class SpiderpotBuilderApp:
         self.status_label = tk.Label(right_frame, text="", fg="blue", bg="white")
         self.status_label.pack(pady=5)
 
-        self.btn_build = ttk.Button(right_frame, text="Kurulumu Başlat", command=self.start_build, style="Accent.TButton")
-        self.btn_build.pack(pady=15)
+        button_frame = tk.Frame(right_frame, bg="white")
+        button_frame.pack(pady=12)
+
+        self.btn_build = ttk.Button(
+            button_frame,
+            text="Bu PC'ye Kur",
+            command=self.start_build,
+            style="Accent.TButton",
+        )
+        self.btn_build.pack(side=tk.LEFT, padx=5)
+
+        self.btn_portable = ttk.Button(
+            button_frame,
+            text="Başka PC İçin EXE Üret",
+            command=self.start_portable_build,
+        )
+        self.btn_portable.pack(side=tk.LEFT, padx=5)
 
         # Style configurations
         try:
@@ -157,6 +172,21 @@ class SpiderpotBuilderApp:
             self.lbl_wp.config(text=filename)
 
     def start_build(self):
+        self._begin_build(install_locally=True)
+
+    def start_portable_build(self):
+        output_path = filedialog.asksaveasfilename(
+            title="Başka bilgisayara gönderilecek EXE'yi kaydet",
+            initialdir=self.get_desktop_path(),
+            initialfile="Spiderpot_Baska_PC.exe",
+            defaultextension=".exe",
+            filetypes=[("Windows Uygulaması", "*.exe")],
+        )
+        if not output_path:
+            return
+        self._begin_build(install_locally=False, output_path=output_path)
+
+    def _begin_build(self, install_locally, output_path=None):
         if not os.path.exists(self.core_script):
             messagebox.showerror("Hata", f"Kaynak kod bulunamadı!\n{self.core_script}")
             return
@@ -165,24 +195,66 @@ class SpiderpotBuilderApp:
             messagebox.showerror("Hata", f"Seçilen duvar kağıdı bulunamadı!\n{self.selected_wallpaper}")
             return
 
-        self.btn_build.config(state=tk.DISABLED, text="Derleniyor...")
-        self.status_label.config(text="Gerekli kütüphaneler kuruluyor ve EXE derleniyor...")
+        self.btn_build.config(state=tk.DISABLED)
+        self.btn_portable.config(state=tk.DISABLED)
+        self.status_label.config(
+            text="Gerekli kütüphaneler kuruluyor ve EXE derleniyor...",
+            fg="blue",
+        )
 
-        threading.Thread(target=self.build_exe, daemon=True).start()
+        threading.Thread(
+            target=self.build_exe,
+            args=(install_locally, output_path),
+            daemon=True,
+        ).start()
 
-    def build_exe(self):
+    def build_exe(self, install_locally=True, output_path=None):
         try:
-            # Kill any running old instances and delete from desktop
             desktop_path = self.get_desktop_path()
-            old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe"]
-            for exe_name in old_exes:
-                subprocess.run(f"taskkill /F /IM {exe_name}", shell=True, capture_output=True)
-                old_path = os.path.join(desktop_path, exe_name)
-                if os.path.exists(old_path):
-                    try:
-                        os.remove(old_path)
-                    except:
-                        pass
+
+            # Yalnızca "Bu PC'ye Kur" akışı mevcut kurulumu değiştirir.
+            if install_locally:
+                old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe"]
+                for exe_name in old_exes:
+                    subprocess.run(f"taskkill /F /IM {exe_name}", shell=True, capture_output=True)
+                    old_path = os.path.join(desktop_path, exe_name)
+                    if os.path.exists(old_path):
+                        try:
+                            os.remove(old_path)
+                        except:
+                            pass
+
+                # Önce önceki otomatik başlangıç kayıtlarını temizle; seçim açıksa
+                # başarılı kurulumdan sonra güncel hedefle yeniden oluşturulacak.
+                try:
+                    import winreg
+                    with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        r"Software\Microsoft\Windows\CurrentVersion\Run",
+                        0,
+                        winreg.KEY_SET_VALUE,
+                    ) as key:
+                        try:
+                            winreg.DeleteValue(key, "Spiderpot_App")
+                        except FileNotFoundError:
+                            pass
+                except Exception:
+                    pass
+
+                try:
+                    old_shortcut = os.path.join(
+                        os.getenv("APPDATA"),
+                        "Microsoft",
+                        "Windows",
+                        "Start Menu",
+                        "Programs",
+                        "Startup",
+                        "Spiderpot.lnk",
+                    )
+                    if os.path.exists(old_shortcut):
+                        os.remove(old_shortcut)
+                except Exception:
+                    pass
             
             subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller", "opencv-python", "pynput", "pillow", "pystray", "screeninfo"], capture_output=True)
             
@@ -237,37 +309,69 @@ except: pass
                 exe_path = os.path.join(dist_dir, "Spiderpot_Sistem.exe")
                 
                 if os.path.exists(exe_path):
-                    desktop_exe = os.path.join(self.get_desktop_path(), "Spiderpot_Sistem.exe")
-                    shutil.copy2(exe_path, desktop_exe)
-                    
-                    # Başlangıç (Startup) klasörüne kısayol ekle
-                    try:
-                        startup_folder = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-                        shortcut_path = os.path.join(startup_folder, "Spiderpot.lnk")
-                        ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{shortcut_path}');$s.TargetPath='{desktop_exe}';$s.WorkingDirectory='{self.get_desktop_path()}';$s.Save()"
-                        subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    except:
-                        pass
-                    
-                    self.root.after(0, self.finish_build, True, desktop_exe)
+                    destination = (
+                        os.path.join(self.get_desktop_path(), "Spiderpot_Sistem.exe")
+                        if install_locally
+                        else output_path
+                    )
+                    shutil.copy2(exe_path, destination)
+
+                    if install_locally and self.auto_start_var.get():
+                        # Başlangıç (Startup) klasörüne kısayol ekle
+                        try:
+                            startup_folder = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+                            shortcut_path = os.path.join(startup_folder, "Spiderpot.lnk")
+                            ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{shortcut_path}');$s.TargetPath='{destination}';$s.WorkingDirectory='{self.get_desktop_path()}';$s.Save()"
+                            subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                        except:
+                            pass
+
+                    self.root.after(
+                        0,
+                        self.finish_build,
+                        True,
+                        destination,
+                        install_locally,
+                    )
                 else:
-                    self.root.after(0, self.finish_build, False, "EXE bulunamadı.")
+                    self.root.after(0, self.finish_build, False, "EXE bulunamadı.", install_locally)
             else:
-                self.root.after(0, self.finish_build, False, result.stderr)
+                self.root.after(0, self.finish_build, False, result.stderr, install_locally)
                 
             try: os.remove(temp_script)
             except: pass
             
         except Exception as e:
-            self.root.after(0, self.finish_build, False, str(e))
+            self.root.after(0, self.finish_build, False, str(e), install_locally)
 
-    def finish_build(self, success, message):
-        self.btn_build.config(state=tk.NORMAL, text="Kurulumu Başlat")
+    def finish_build(self, success, message, install_locally=True):
+        self.btn_build.config(state=tk.NORMAL)
+        self.btn_portable.config(state=tk.NORMAL)
         if success:
             self.status_label.config(text="Tamamlandı!", fg="green")
-            messagebox.showinfo("Başarılı", f"Spiderpot başarıyla derlendi!\nEXE Dosyası Masaüstüne kaydedildi.\n\nEğer otomatik başlatmayı seçtiyseniz bilgisayar açıldığında kendiliğinden çalışacaktır.")
-            try: os.startfile(message)
-            except: pass
+            if install_locally:
+                messagebox.showinfo(
+                    "Başarılı",
+                    "Spiderpot bu bilgisayara kuruldu!\n"
+                    "EXE dosyası Masaüstüne kaydedildi.\n\n"
+                    "Eğer otomatik başlatmayı seçtiyseniz bilgisayar açıldığında "
+                    "kendiliğinden çalışacaktır.",
+                )
+                try:
+                    os.startfile(message)
+                except:
+                    pass
+            else:
+                messagebox.showinfo(
+                    "Başarılı",
+                    "Başka bilgisayara gönderilecek Spiderpot EXE hazır!\n\n"
+                    f"Kaydedilen dosya:\n{message}\n\n"
+                    "Bu bilgisayardaki mevcut Spiderpot değiştirilmedi ve yeni EXE çalıştırılmadı.",
+                )
+                try:
+                    os.startfile(os.path.dirname(message))
+                except:
+                    pass
         else:
             self.status_label.config(text="Derleme hatası!", fg="red")
             messagebox.showerror("Hata", f"Hata detayı:\n{message}")
