@@ -7,6 +7,8 @@ import sys
 import shutil
 import tempfile
 
+BUILDER_VERSION = "2026-07-28 19:43"
+
 class SpiderpotBuilderApp:
     def __init__(self, root):
         self.root = root
@@ -63,7 +65,14 @@ class SpiderpotBuilderApp:
         right_frame = tk.Frame(main_frame, bg="white")
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        tk.Label(right_frame, text="Spiderpot Kurulum Sihirbazı", font=("Segoe UI", 16, "bold"), bg="white", fg="red").pack(pady=15)
+        tk.Label(right_frame, text="Spiderpot Kurulum Sihirbazı", font=("Segoe UI", 16, "bold"), bg="white", fg="red").pack(pady=(12, 2))
+        tk.Label(
+            right_frame,
+            text=f"Sürüm: {BUILDER_VERSION} - kamera ışığı yalnızca yakalamada yanar",
+            font=("Segoe UI", 8),
+            bg="white",
+            fg="#666666",
+        ).pack(pady=(0, 8))
         
         # --- Settings Frame ---
         settings_frame = tk.Frame(right_frame, bg="white")
@@ -76,6 +85,13 @@ class SpiderpotBuilderApp:
         self.lbl_wp = tk.Label(wp_frame, text="1 görsel seçildi", font=("Segoe UI", 9), bg="white", fg="blue", width=22, anchor="e")
         self.lbl_wp.pack(side=tk.LEFT, padx=5)
         tk.Button(wp_frame, text="Çoklu Seç", command=self.browse_wallpaper, height=1, relief="groove").pack(side=tk.RIGHT)
+
+        interval_frame = tk.Frame(settings_frame, bg="white")
+        interval_frame.pack(fill=tk.X, pady=2)
+        tk.Label(interval_frame, text="Ctrl+1 Foto Geçiş Aralığı (sn):", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
+        self.slide_interval_entry = ttk.Entry(interval_frame, width=6)
+        self.slide_interval_entry.insert(0, "5")
+        self.slide_interval_entry.pack(side=tk.RIGHT)
         
         ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
 
@@ -157,6 +173,29 @@ class SpiderpotBuilderApp:
         except:
             return os.path.join(os.path.expanduser("~"), "Desktop")
 
+    def replace_existing_exe(self, source, destination):
+        source = os.path.abspath(source)
+        destination = os.path.abspath(destination)
+
+        if os.path.normcase(source) == os.path.normcase(destination):
+            return destination
+
+        destination_dir = os.path.dirname(destination)
+        if destination_dir:
+            os.makedirs(destination_dir, exist_ok=True)
+
+        if os.path.exists(destination):
+            try:
+                os.remove(destination)
+            except PermissionError:
+                raise PermissionError(
+                    "Aynı isimdeki eski EXE silinemedi. Dosya şu an çalışıyor "
+                    "veya başka bir program tarafından tutuluyor olabilir; kapatıp tekrar deneyin."
+                )
+
+        shutil.copy2(source, destination)
+        return destination
+
     def browse_wallpaper(self):
         filepaths = filedialog.askopenfilenames(
             title="Ctrl+1 için istediğiniz tüm görselleri seçin",
@@ -203,6 +242,17 @@ class SpiderpotBuilderApp:
             )
             return
 
+        interval_text = self.slide_interval_entry.get().strip().replace(",", ".")
+        try:
+            self.slide_interval_seconds = float(interval_text)
+        except ValueError:
+            messagebox.showerror("Hata", "Foto geçiş aralığı sayı olmalı. Örn: 5 veya 2,5")
+            return
+
+        if self.slide_interval_seconds <= 0:
+            messagebox.showerror("Hata", "Foto geçiş aralığı 0'dan büyük olmalı.")
+            return
+
         self.btn_build.config(state=tk.DISABLED)
         self.btn_portable.config(state=tk.DISABLED)
         self.status_label.config(
@@ -224,7 +274,7 @@ class SpiderpotBuilderApp:
 
             # Yalnızca "Bu PC'ye Kur" akışı mevcut kurulumu değiştirir.
             if install_locally:
-                old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe"]
+                old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe", "BearPot.exe"]
                 for exe_name in old_exes:
                     subprocess.run(f"taskkill /F /IM {exe_name}", shell=True, capture_output=True)
                     old_path = os.path.join(desktop_path, exe_name)
@@ -276,6 +326,10 @@ class SpiderpotBuilderApp:
             code = code.replace("self.key_black = '2'", f"self.key_black = '{self.k2_entry.get().strip().lower()}'")
             code = code.replace("self.key_lock = '3'", f"self.key_lock = '{self.k3_entry.get().strip().lower()}'")
             code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
+            code = code.replace(
+                "SLIDESHOW_SECONDS = 5",
+                f"SLIDESHOW_SECONDS = {self.slide_interval_seconds!r}",
+            )
 
             # Rename image references internally to the selected image's name so pyinstaller finds it easily
             selected_wallpaper = self.selected_wallpapers[0]
@@ -356,7 +410,7 @@ except: pass
                         if install_locally
                         else output_path
                     )
-                    shutil.copy2(exe_path, destination)
+                    self.replace_existing_exe(exe_path, destination)
 
                     if install_locally and self.auto_start_var.get():
                         # Başlangıç (Startup) klasörüne kısayol ekle

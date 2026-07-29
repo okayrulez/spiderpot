@@ -18,7 +18,7 @@ Spiderpot'un arka planda çalışırken tetikleyebileceğiniz 3 farklı çalış
 * **Kısayol:** `Ctrl + 1` (veya belirlediğiniz kısayol)
 * Biri bilgisayarınıza dokunduğu anda ekran anında donar, tüm Windows kısayolları (Ctrl+Alt+Del, Alt+Tab, Windows tuşu) devre dışı bırakılır ve fareniz kilitlenir.
 * Kurulumda seçilen ana duvar kâğıdıyla `Assets/Slayt_Gorselleri` klasöründeki görseller tam ekran gösterilir.
-* Tek görsel varsa sabit kalır; birden fazla görsel varsa dosya adına göre sıralanır, her biri **5 saniye** kalır ve aralarında yumuşak geçiş yapılır.
+* Tek görsel varsa sabit kalır; birden fazla görsel varsa kurulumda seçtiğiniz saniye aralığıyla akar ve aralarında yumuşak geçiş yapılır.
 * Temas algılandığında çekilen fotoğraf **YAKALANDIN!** yazısıyla 3 saniye gösterilir ve ardından duvar kâğıdı akışına geri dönülür.
 
 ### 3. Siyah Ekran Modu ⬛
@@ -32,7 +32,7 @@ Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğin
 
 ## 🛠️ Nasıl Kurulur?
 1. `Spiderpot_Kurulum.py` arayüzündeki **Çoklu Seç** düğmesine basın; `Ctrl+A`, `Ctrl` veya `Shift` kullanarak istediğiniz sayıda Ctrl+1 görseli seçin.
-2. İlk seçilen görsel başlangıç duvar kâğıdı olur; diğerleri seçilen sırayla 5 saniyelik akışa eklenir. İsterseniz `Assets/Slayt_Gorselleri` klasörüne ayrıca görsel de kopyalayabilirsiniz.
+2. İlk seçilen görsel başlangıç duvar kâğıdı olur; diğerleri seçilen sırayla akışa eklenir. **Ctrl+1 Foto Geçiş Aralığı (sn)** alanından fotoğrafların kaç saniyede bir değişeceğini yazabilirsiniz. İsterseniz `Assets/Slayt_Gorselleri` klasörüne ayrıca görsel de kopyalayabilirsiniz.
 3. **Bu PC'ye Kur** düğmesi mevcut yerel Spiderpot'u yeniler, başlangıç ayarını uygular ve yeni EXE'yi çalıştırır.
 4. **Başka PC İçin EXE Üret** düğmesi ise mevcut kuruluma dokunmadan kayıt yerini seçtiğiniz tek dosyalık bir EXE üretir; dosyayı çalıştırmaz ve bu bilgisayara başlangıç kaydı eklemez.
 

@@ -8,6 +8,7 @@ import sys
 import winreg
 import tkinter as tk
 import threading
+import tempfile
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 ES_CONTINUOUS = 0x80000000
@@ -374,7 +375,7 @@ class SpiderpotViewer:
             # Tek görsel varsa sabit duvar kâğıdı olarak ekranda kalır.
             if len(self.slideshow_paths) > 1:
                 self.slideshow_job = self.parent.after(
-                    self.SLIDESHOW_SECONDS * 1000,
+                    int(self.SLIDESHOW_SECONDS * 1000),
                     lambda: self._advance_slideshow(generation),
                 )
 
@@ -413,7 +414,7 @@ class SpiderpotViewer:
             self.slideshow_current_pil = next_images
             if len(self.slideshow_paths) > 1:
                 self.slideshow_job = self.parent.after(
-                    self.SLIDESHOW_SECONDS * 1000,
+                    int(self.SLIDESHOW_SECONDS * 1000),
                     lambda: self._advance_slideshow(generation),
                 )
 
@@ -458,13 +459,36 @@ class SpiderpotApp:
         self.capture_feedback_ms = 3000
         self.capture_feedback_job = None
         self.camera_port = 0
+        self.camera_ports_to_try = [0, 1, 2, 3, 4]
         self.capture_lock = threading.Lock()
         
         desktop_path = get_desktop_path()
-        self.save_folder = os.path.join(desktop_path, "Spiderpot_Yakalananlar")
-        if not os.path.exists(self.save_folder):
-            try: os.makedirs(self.save_folder)
-            except: pass
+        app_dir = (
+            os.path.dirname(sys.executable)
+            if getattr(sys, 'frozen', False)
+            else os.path.dirname(os.path.abspath(__file__))
+        )
+        desktop_save_folder = os.path.join(desktop_path, "Spiderpot_Yakalananlar")
+        app_save_folder = os.path.join(app_dir, "Spiderpot_Yakalananlar")
+        temp_save_folder = os.path.join(tempfile.gettempdir(), "Spiderpot_Yakalananlar")
+        self.save_folders = []
+        for folder in [desktop_save_folder, app_save_folder, temp_save_folder]:
+            if os.path.normcase(os.path.abspath(folder)) not in {
+                os.path.normcase(os.path.abspath(existing))
+                for existing in self.save_folders
+            }:
+                self.save_folders.append(folder)
+        self.save_folder = self.save_folders[0]
+        self.log_paths = [
+            os.path.join(folder, "Spiderpot_Log.txt")
+            for folder in self.save_folders
+        ]
+        self.log_path = self.log_paths[0]
+        for folder in self.save_folders:
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except Exception:
+                pass
 
         self.viewer = SpiderpotViewer(self.root)
         
@@ -489,19 +513,168 @@ class SpiderpotApp:
         self.input_listener = keyboard.Listener(on_press=self.on_global_press)
         self.input_listener.start()
         
-        # Pre-initialize camera silently in background on startup to be extremely fast later
-        threading.Thread(target=self._init_camera, daemon=True).start()
-        
         # Bilgisayarı açık tutma protokolü
         prevent_sleep()
 
     def _init_camera(self):
         try:
-            if self.cap is None or not self.cap.isOpened():
-                temp_cap = cv2.VideoCapture(self.camera_port)
-                with self.capture_lock:
-                    self.cap = temp_cap
-        except: pass
+            with self.capture_lock:
+                self._ensure_camera_locked()
+        except Exception as e:
+            self._log_error("Kamera hazirlanamadi.", error=e)
+
+    def _log_error(self, message, **details):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        detail_text = ""
+        if details:
+            detail_parts = []
+            for key, value in details.items():
+                if isinstance(value, Exception):
+                    value = f"{type(value).__name__}: {value}"
+                detail_parts.append(f"{key}={value!r}")
+            detail_text = " | " + " | ".join(detail_parts)
+
+        for log_path in getattr(self, "log_paths", [self.log_path]):
+            try:
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"[{timestamp}] {message}{detail_text}\n")
+                return
+            except Exception:
+                pass
+
+    def _path_details(self, path):
+        try:
+            parent = os.path.dirname(path)
+            return {
+                "path": path,
+                "parent": parent,
+                "parent_exists": os.path.isdir(parent),
+                "parent_writable": os.access(parent, os.W_OK) if os.path.isdir(parent) else False,
+                "target_exists": os.path.exists(path),
+            }
+        except Exception as e:
+            return {"path": path, "detail_error": f"{type(e).__name__}: {e}"}
+
+    def _ensure_camera_locked(self):
+        if self.cap is not None and self.cap.isOpened():
+            return True
+
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+            self.cap = None
+
+        ports = [self.camera_port] + [
+            port for port in self.camera_ports_to_try
+            if port != self.camera_port
+        ]
+        for port in ports:
+            cap = None
+            try:
+                cap = cv2.VideoCapture(port, cv2.CAP_DSHOW)
+                opened = cap.isOpened()
+            except Exception as e:
+                self._log_error("Kamera portu acilamadi.", port=port, error=e)
+                opened = False
+
+            if not opened:
+                self._log_error("Kamera portu kapali.", port=port)
+                try:
+                    if cap is not None:
+                        cap.release()
+                except Exception:
+                    pass
+                continue
+
+            ok = False
+            last_ret = None
+            for _ in range(5):
+                ret, _frame = cap.read()
+                last_ret = ret
+                if ret:
+                    ok = True
+                    break
+
+            if ok:
+                self.cap = cap
+                self.camera_port = port
+                self._log_error("Kamera hazir.", port=port)
+                return True
+
+            self._log_error("Kamera portu acildi ama kare vermedi.", port=port, last_ret=last_ret)
+            try:
+                cap.release()
+            except Exception:
+                pass
+
+        self._log_error("Calisan kamera bulunamadi.", tried_ports=ports)
+        return False
+
+    def _release_camera_locked(self):
+        if self.cap is None:
+            return
+
+        tmp = self.cap
+        self.cap = None
+        try:
+            tmp.release()
+            self._log_error("Kamera serbest birakildi.", camera_port=self.camera_port)
+        except Exception as e:
+            self._log_error("Kamera serbest birakilamadi.", camera_port=self.camera_port, error=e)
+
+    def _save_frame(self, filepath, frame):
+        try:
+            ok, encoded = cv2.imencode(".jpg", frame)
+            if not ok:
+                self._log_error("Foto JPG encode edilemedi.", **self._path_details(filepath))
+                return False
+            with open(filepath, "wb") as f:
+                f.write(encoded.tobytes())
+            self._log_error(
+                "Foto kaydedildi.",
+                bytes=len(encoded),
+                frame_shape=getattr(frame, "shape", None),
+                **self._path_details(filepath),
+            )
+            return True
+        except Exception as e:
+            self._log_error(
+                "Foto yazma hatasi.",
+                error=e,
+                frame_shape=getattr(frame, "shape", None),
+                **self._path_details(filepath),
+            )
+            return False
+
+    def _save_frame_to_available_folder(self, filename, frame):
+        self._log_error(
+            "Foto kayit denemesi basladi.",
+            filename=filename,
+            folders=self.save_folders,
+            frame_shape=getattr(frame, "shape", None),
+        )
+        for index, folder in enumerate(self.save_folders, start=1):
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except Exception as e:
+                self._log_error("Foto klasoru olusturulamadi.", folder=folder, error=e, attempt=index)
+                continue
+
+            filepath = os.path.join(folder, filename)
+            self._log_error("Foto klasoru deneniyor.", attempt=index, **self._path_details(filepath))
+            if self._save_frame(filepath, frame):
+                if folder != self.save_folder:
+                    self._log_error("Foto yedek klasore kaydedildi.", attempt=index, path=filepath)
+                self.save_folder = folder
+                return filepath
+
+            self._log_error("Foto bu klasore kaydedilemedi.", attempt=index, **self._path_details(filepath))
+
+        self._log_error("Foto hicbir klasore kaydedilemedi.", filename=filename, folders=self.save_folders)
+        return None
 
     def _resolve_hotkeys(self):
         # Mod tuşlarını sanal tuş koduna (vk) çevir. vk; klavye düzeninden ve Ctrl'nin
@@ -588,16 +761,27 @@ class SpiderpotApp:
             current_time = time.time()
             if current_time - self.last_capture_time < self.cooldown_seconds:
                 return
+            self.last_capture_time = current_time
 
-            if self.cap is not None and self.cap.isOpened():
-                ret, frame = self.cap.read()
-                if ret:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"yakalandin_{timestamp}.jpg"
-                    filepath = os.path.join(self.save_folder, filename)
-                    if cv2.imwrite(filepath, frame):
-                        self.last_capture_time = current_time
-                        captured_path = filepath
+            camera_opened = False
+            try:
+                if self._ensure_camera_locked():
+                    camera_opened = True
+                    ret, frame = self.cap.read()
+                    if ret:
+                        self._log_error(
+                            "Kameradan kare alindi.",
+                            camera_port=self.camera_port,
+                            frame_shape=getattr(frame, "shape", None),
+                        )
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"yakalandin_{timestamp}.jpg"
+                        captured_path = self._save_frame_to_available_folder(filename, frame)
+                    else:
+                        self._log_error("Kameradan kare okunamadi.", camera_port=self.camera_port)
+            finally:
+                if camera_opened:
+                    self._release_camera_locked()
 
         if captured_path:
             self.root.after(0, lambda path=captured_path: self._show_capture_feedback(path))
@@ -606,6 +790,7 @@ class SpiderpotApp:
         if not self.is_active:
             return
         if not self.viewer.show_capture(image_path):
+            self._log_error(f"Yakalandin ekrani gosterilemedi: {image_path}")
             return
 
         if self.capture_feedback_job is not None:
@@ -660,11 +845,6 @@ class SpiderpotApp:
 
     def start_system(self, mode):
         if not self.is_active:
-            # We already load camera asynchronously, so we don't block here.
-            # Just fallback to starting thread if not opened yet.
-            if self.cap is None or not self.cap.isOpened():
-                threading.Thread(target=self._init_camera, daemon=True).start()
-                
             self.mouse_listener = mouse.Listener(on_move=self.on_move, on_click=self.on_click, on_scroll=self.on_scroll, suppress=True)
             self.mouse_listener.start()
             
@@ -701,11 +881,8 @@ class SpiderpotApp:
         
         # Kamerayı asenkron kapat ki ışık sönsün ve program kilitlenmesin
         def _release_cam():
-            if hasattr(self, 'cap') and self.cap is not None:
-                tmp = self.cap
-                self.cap = None
-                try: tmp.release()
-                except: pass
+            with self.capture_lock:
+                self._release_camera_locked()
         threading.Thread(target=_release_cam, daemon=True).start()
 
     def lock_screen(self):
@@ -716,6 +893,12 @@ class SpiderpotApp:
         self.stop_system()
         if self.input_listener:
             try: self.input_listener.stop()
+            except: pass
+        if self.mouse_listener:
+            try: self.mouse_listener.stop()
+            except: pass
+        if hasattr(self, 'tray_icon') and self.tray_icon:
+            try: self.tray_icon.stop()
             except: pass
         
         # Tamamen çıkarken kamerayı serbest bırak
