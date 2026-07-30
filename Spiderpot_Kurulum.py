@@ -1,486 +1,613 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import json
 import os
-import subprocess
-import threading
-import sys
 import shutil
-import tempfile
+import subprocess
+import sys
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 
-BUILDER_VERSION = "2026-07-28 19:43"
 
-class SpiderpotBuilderApp:
+APP_NAME = "Spiderpot"
+APP_VERSION = "2026.07.30"
+PUBLISHER = "Spiderpot"
+SUPPORTED_IMAGES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0)
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+
+def resource_path(*parts):
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, *parts)
+
+
+def get_desktop_path():
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+        ) as key:
+            return winreg.QueryValueEx(key, "Desktop")[0]
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
+def get_install_dir():
+    local_app_data = os.environ.get(
+        "LOCALAPPDATA",
+        os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+    )
+    return os.path.abspath(os.path.join(local_app_data, "Programs", APP_NAME))
+
+
+def powershell_quote(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+class SpiderpotInstaller:
     def __init__(self, root):
         self.root = root
-        self.root.title("Spiderpot Setup Wizard")
-        from PIL import Image, ImageTk
-        self.root.geometry("750x550")
+        self.root.title(f"{APP_NAME} Kurulum")
+        self.root.geometry("780x590")
         self.root.resizable(False, False)
-        
+        self.install_dir = get_install_dir()
+        self.payload_exe = resource_path("Payload", "Spiderpot_Sistem.exe")
+        self.default_wallpaper = resource_path("Assets", "spider_noir.jpg")
+        self.selected_wallpapers = [self.default_wallpaper]
+        self._build_ui()
+
+    def _build_ui(self):
         try:
             style = ttk.Style()
-            style.theme_use('vista')
-        except: pass
-
-        desktop_path = self.get_desktop_path()
-        self.build_dir = os.path.dirname(os.path.abspath(__file__))
-        self.core_script = os.path.join(self.build_dir, "Assets", "Spiderpot_Core.py")
-        self.selected_wallpapers = [
-            os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
-        ]
-        self.slideshow_dir = os.path.join(self.build_dir, "Assets", "Slayt_Gorselleri")
-
-        main_frame = tk.Frame(root, bg="white")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Left panel for image
-        left_frame = tk.Frame(main_frame, bg="black", width=250)
-        left_frame.pack(side=tk.LEFT, fill=tk.Y)
-        left_frame.pack_propagate(False)
-
-        # Load and crop image
-        try:
-            img_path = r"C:\Users\oktay.dedeoglu\Downloads\spider-noir-2026-5120x2880-24881.jpg"
-            img = Image.open(img_path)
-            target_width, target_height = 250, 550
-            img_ratio = img.width / img.height
-            target_ratio = target_width / target_height
-            
-            if img_ratio > target_ratio:
-                new_w = int(img.height * target_ratio)
-                offset = (img.width - new_w) // 2
-                img = img.crop((offset, 0, offset + new_w, img.height))
-            else:
-                new_h = int(img.width / target_ratio)
-                offset = (img.height - new_h) // 2
-                img = img.crop((0, offset, img.width, offset + new_h))
-                
-            img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-            self.wizard_photo = ImageTk.PhotoImage(img)
-            tk.Label(left_frame, image=self.wizard_photo, bg="black").pack(fill=tk.BOTH, expand=True)
+            style.theme_use("vista")
         except Exception:
-            tk.Label(left_frame, text="Spiderpot", fg="red", bg="black", font=("Segoe UI", 24, "bold")).pack(expand=True)
+            style = ttk.Style()
 
-        # Right panel for settings
-        right_frame = tk.Frame(main_frame, bg="white")
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        tk.Label(right_frame, text="Spiderpot Kurulum Sihirbazı", font=("Segoe UI", 16, "bold"), bg="white", fg="red").pack(pady=(12, 2))
+        container = tk.Frame(self.root, bg="#101114")
+        container.pack(fill=tk.BOTH, expand=True)
+
+        left = tk.Frame(container, bg="black", width=265)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+        left.pack_propagate(False)
+        try:
+            from PIL import Image, ImageTk
+
+            image = Image.open(self.default_wallpaper).convert("RGB")
+            target_w, target_h = 265, 590
+            image_ratio = image.width / image.height
+            target_ratio = target_w / target_h
+            if image_ratio > target_ratio:
+                new_w = int(image.height * target_ratio)
+                offset = (image.width - new_w) // 2
+                image = image.crop((offset, 0, offset + new_w, image.height))
+            else:
+                new_h = int(image.width / target_ratio)
+                offset = (image.height - new_h) // 2
+                image = image.crop((0, offset, image.width, offset + new_h))
+            image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            self.hero_image = ImageTk.PhotoImage(image)
+            tk.Label(left, image=self.hero_image, bg="black").pack(fill=tk.BOTH, expand=True)
+        except Exception:
+            tk.Label(
+                left,
+                text="SPIDERPOT",
+                fg="#ff3030",
+                bg="black",
+                font=("Segoe UI", 24, "bold"),
+            ).pack(expand=True)
+
+        right = tk.Frame(container, bg="white")
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
         tk.Label(
-            right_frame,
-            text=f"Sürüm: {BUILDER_VERSION} - kamera ışığı yalnızca yakalamada yanar",
-            font=("Segoe UI", 8),
+            right,
+            text="Spiderpot Kurulum Sihirbazı",
+            font=("Segoe UI", 18, "bold"),
+            bg="white",
+            fg="#bd1111",
+        ).pack(pady=(18, 2))
+        tk.Label(
+            right,
+            text=f"Sürüm {APP_VERSION} • Python gerekmez • Kullanıcı başına kurulum",
+            font=("Segoe UI", 9),
             bg="white",
             fg="#666666",
-        ).pack(pady=(0, 8))
-        
-        # --- Settings Frame ---
-        settings_frame = tk.Frame(right_frame, bg="white")
-        settings_frame.pack(fill=tk.X, padx=20, pady=5)
-        
-        # 1. Wallpaper Selection
-        wp_frame = tk.Frame(settings_frame, bg="white")
-        wp_frame.pack(fill=tk.X, pady=5)
-        tk.Label(wp_frame, text="Ctrl+1 Görselleri:", font=("Segoe UI", 10, "bold"), bg="white").pack(side=tk.LEFT)
-        self.lbl_wp = tk.Label(wp_frame, text="1 görsel seçildi", font=("Segoe UI", 9), bg="white", fg="blue", width=22, anchor="e")
-        self.lbl_wp.pack(side=tk.LEFT, padx=5)
-        tk.Button(wp_frame, text="Çoklu Seç", command=self.browse_wallpaper, height=1, relief="groove").pack(side=tk.RIGHT)
+        ).pack(pady=(0, 12))
 
-        interval_frame = tk.Frame(settings_frame, bg="white")
-        interval_frame.pack(fill=tk.X, pady=2)
-        tk.Label(interval_frame, text="Ctrl+1 Foto Geçiş Aralığı (sn):", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.slide_interval_entry = ttk.Entry(interval_frame, width=6)
-        self.slide_interval_entry.insert(0, "5")
-        self.slide_interval_entry.pack(side=tk.RIGHT)
-        
-        ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
+        settings = tk.Frame(right, bg="white")
+        settings.pack(fill=tk.X, padx=24)
 
-        # 2. Key Settings
-        tk.Label(settings_frame, text="Kısayol Ayarları (Tümü Ctrl ile çalışır)", font=("Segoe UI", 11, "bold"), bg="white").pack(anchor="w", pady=5)
-
-        # Trap 1
-        k1_frame = tk.Frame(settings_frame, bg="white")
-        k1_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k1_frame, text="Tuzak 1 (Wallpaper) Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k1_entry = ttk.Entry(k1_frame, width=5)
-        self.k1_entry.insert(0, "1")
-        self.k1_entry.pack(side=tk.RIGHT)
-
-        # Trap 2
-        k2_frame = tk.Frame(settings_frame, bg="white")
-        k2_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k2_frame, text="Tuzak 2 (Siyah Ekran) Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k2_entry = ttk.Entry(k2_frame, width=5)
-        self.k2_entry.insert(0, "2")
-        self.k2_entry.pack(side=tk.RIGHT)
-
-        # Lock
-        k3_frame = tk.Frame(settings_frame, bg="white")
-        k3_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k3_frame, text="Anında Kilitleme Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k3_entry = ttk.Entry(k3_frame, width=5)
-        self.k3_entry.insert(0, "3")
-        self.k3_entry.pack(side=tk.RIGHT)
-
-        # Exit
-        ke_frame = tk.Frame(settings_frame, bg="white")
-        ke_frame.pack(fill=tk.X, pady=2)
-        tk.Label(ke_frame, text="Tuzağı Kapatma Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.ke_combo = ttk.Combobox(ke_frame, values=["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "esc", "end"], state="readonly", width=5)
-        self.ke_combo.set("f12")
-        self.ke_combo.pack(side=tk.RIGHT)
-
-        ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
-
-        self.auto_start_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(settings_frame, text="Windows açılışında arka planda gizlice otomatik başlat", variable=self.auto_start_var, bg="white", font=("Segoe UI", 10)).pack(anchor="w", pady=5)
-
-        self.add_icon_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(settings_frame, text="Masaüstü simgesi (Icon) oluşturulsun mu?", variable=self.add_icon_var, bg="white", font=("Segoe UI", 10)).pack(anchor="w", pady=5)
-
-        # --- Build Button & Status ---
-        self.status_label = tk.Label(right_frame, text="", fg="blue", bg="white")
-        self.status_label.pack(pady=5)
-
-        button_frame = tk.Frame(right_frame, bg="white")
-        button_frame.pack(pady=12)
-
-        self.btn_build = ttk.Button(
-            button_frame,
-            text="Bu PC'ye Kur",
-            command=self.start_build,
-            style="Accent.TButton",
+        wallpaper_row = tk.Frame(settings, bg="white")
+        wallpaper_row.pack(fill=tk.X, pady=5)
+        tk.Label(
+            wallpaper_row,
+            text="Ctrl+1 görselleri",
+            font=("Segoe UI", 10, "bold"),
+            bg="white",
+        ).pack(side=tk.LEFT)
+        self.wallpaper_label = tk.Label(
+            wallpaper_row,
+            text="1 görsel seçildi",
+            font=("Segoe UI", 9),
+            bg="white",
+            fg="#0b63ce",
         )
-        self.btn_build.pack(side=tk.LEFT, padx=5)
+        self.wallpaper_label.pack(side=tk.LEFT, padx=12)
+        ttk.Button(
+            wallpaper_row,
+            text="Görselleri Seç",
+            command=self.select_wallpapers,
+        ).pack(side=tk.RIGHT)
 
-        self.btn_portable = ttk.Button(
-            button_frame,
-            text="Başka PC İçin EXE Üret",
-            command=self.start_portable_build,
+        interval_row = tk.Frame(settings, bg="white")
+        interval_row.pack(fill=tk.X, pady=5)
+        tk.Label(
+            interval_row,
+            text="Fotoğraf geçiş süresi (saniye)",
+            font=("Segoe UI", 10),
+            bg="white",
+        ).pack(side=tk.LEFT)
+        self.interval_entry = ttk.Entry(interval_row, width=8)
+        self.interval_entry.insert(0, "5")
+        self.interval_entry.pack(side=tk.RIGHT)
+
+        ttk.Separator(settings).pack(fill=tk.X, pady=12)
+        tk.Label(
+            settings,
+            text="Kısayollar (Ctrl ile çalışır)",
+            font=("Segoe UI", 11, "bold"),
+            bg="white",
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.key_spider = self._key_row(settings, "Duvar kâğıdı modu", "1")
+        self.key_black = self._key_row(settings, "Siyah ekran modu", "2")
+        self.key_lock = self._key_row(settings, "Görünmez tuzak modu", "3")
+
+        exit_row = tk.Frame(settings, bg="white")
+        exit_row.pack(fill=tk.X, pady=4)
+        tk.Label(exit_row, text="Tuzağı kapatma tuşu", font=("Segoe UI", 10), bg="white").pack(
+            side=tk.LEFT
         )
-        self.btn_portable.pack(side=tk.LEFT, padx=5)
+        self.key_exit = ttk.Combobox(
+            exit_row,
+            values=[
+                "f1",
+                "f2",
+                "f3",
+                "f4",
+                "f5",
+                "f6",
+                "f7",
+                "f8",
+                "f9",
+                "f10",
+                "f11",
+                "f12",
+                "esc",
+                "end",
+            ],
+            state="readonly",
+            width=7,
+        )
+        self.key_exit.set("f12")
+        self.key_exit.pack(side=tk.RIGHT)
 
-        # Style configurations
-        try:
-            style.configure("Accent.TButton", font=("Segoe UI", 12, "bold"))
-        except: pass
+        ttk.Separator(settings).pack(fill=tk.X, pady=12)
 
-    def get_desktop_path(self):
-        try:
-            import winreg
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders")
-            return winreg.QueryValueEx(key, "Desktop")[0]
-        except:
-            return os.path.join(os.path.expanduser("~"), "Desktop")
+        self.auto_start = tk.BooleanVar(value=True)
+        self.desktop_shortcut = tk.BooleanVar(value=True)
+        self.launch_after_install = tk.BooleanVar(value=True)
+        for text, variable in [
+            ("Windows açılışında otomatik başlat", self.auto_start),
+            ("Masaüstü kısayolu oluştur", self.desktop_shortcut),
+            ("Kurulum bitince Spiderpot'u çalıştır", self.launch_after_install),
+        ]:
+            tk.Checkbutton(
+                settings,
+                text=text,
+                variable=variable,
+                bg="white",
+                font=("Segoe UI", 10),
+                activebackground="white",
+            ).pack(anchor="w", pady=2)
 
-    def replace_existing_exe(self, source, destination):
-        source = os.path.abspath(source)
-        destination = os.path.abspath(destination)
+        self.status = tk.Label(right, text="", bg="white", fg="#0b63ce", font=("Segoe UI", 9))
+        self.status.pack(pady=(12, 4))
 
-        if os.path.normcase(source) == os.path.normcase(destination):
-            return destination
+        buttons = tk.Frame(right, bg="white")
+        buttons.pack(pady=8)
+        self.install_button = ttk.Button(
+            buttons,
+            text="Spiderpot'u Kur / Güncelle",
+            command=self.start_install,
+        )
+        self.install_button.pack(side=tk.LEFT, padx=5)
+        self.uninstall_button = ttk.Button(
+            buttons,
+            text="Kaldır",
+            command=self.confirm_uninstall,
+        )
+        self.uninstall_button.pack(side=tk.LEFT, padx=5)
 
-        destination_dir = os.path.dirname(destination)
-        if destination_dir:
-            os.makedirs(destination_dir, exist_ok=True)
+        tk.Label(
+            right,
+            text=f"Kurulum konumu: {self.install_dir}",
+            bg="white",
+            fg="#777777",
+            font=("Segoe UI", 8),
+            wraplength=460,
+        ).pack(pady=(4, 0))
 
-        if os.path.exists(destination):
-            try:
-                os.remove(destination)
-            except PermissionError:
-                raise PermissionError(
-                    "Aynı isimdeki eski EXE silinemedi. Dosya şu an çalışıyor "
-                    "veya başka bir program tarafından tutuluyor olabilir; kapatıp tekrar deneyin."
-                )
+    def _key_row(self, parent, label, default):
+        row = tk.Frame(parent, bg="white")
+        row.pack(fill=tk.X, pady=4)
+        tk.Label(row, text=label, font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
+        entry = ttk.Entry(row, width=8)
+        entry.insert(0, default)
+        entry.pack(side=tk.RIGHT)
+        return entry
 
-        shutil.copy2(source, destination)
-        return destination
-
-    def browse_wallpaper(self):
-        filepaths = filedialog.askopenfilenames(
-            title="Ctrl+1 için istediğiniz tüm görselleri seçin",
+    def select_wallpapers(self):
+        selected = filedialog.askopenfilenames(
+            title="Ctrl+1 için görselleri seçin",
             filetypes=[
                 ("Resim Dosyaları", "*.jpg *.jpeg *.png *.bmp *.webp"),
                 ("Tüm Dosyalar", "*.*"),
             ],
         )
-        if filepaths:
-            self.selected_wallpapers = list(filepaths)
-            count = len(self.selected_wallpapers)
-            self.lbl_wp.config(text=f"{count} görsel seçildi")
+        if selected:
+            self.selected_wallpapers = list(selected)
+            self.wallpaper_label.config(text=f"{len(selected)} görsel seçildi")
 
-    def start_build(self):
-        self._begin_build(install_locally=True)
+    def _validated_settings(self):
+        missing = [path for path in self.selected_wallpapers if not os.path.isfile(path)]
+        if missing:
+            raise ValueError(f"Seçilen görsel bulunamadı:\n{missing[0]}")
 
-    def start_portable_build(self):
-        output_path = filedialog.asksaveasfilename(
-            title="Başka bilgisayara gönderilecek EXE'yi kaydet",
-            initialdir=self.get_desktop_path(),
-            initialfile="Spiderpot_Baska_PC.exe",
-            defaultextension=".exe",
-            filetypes=[("Windows Uygulaması", "*.exe")],
-        )
-        if not output_path:
+        try:
+            interval = float(self.interval_entry.get().strip().replace(",", "."))
+        except ValueError as error:
+            raise ValueError("Fotoğraf geçiş süresi sayı olmalı.") from error
+        if interval <= 0:
+            raise ValueError("Fotoğraf geçiş süresi 0'dan büyük olmalı.")
+
+        keys = {
+            "key_spider": self.key_spider.get().strip().lower(),
+            "key_black": self.key_black.get().strip().lower(),
+            "key_lock": self.key_lock.get().strip().lower(),
+            "key_exit": self.key_exit.get().strip().lower(),
+        }
+        if any(not value for value in keys.values()):
+            raise ValueError("Kısayol alanları boş bırakılamaz.")
+        if len({keys["key_spider"], keys["key_black"], keys["key_lock"]}) != 3:
+            raise ValueError("Üç tuzak modu farklı tuşlar kullanmalı.")
+
+        return {
+            **keys,
+            "slideshow_seconds": interval,
+            "version": APP_VERSION,
+        }
+
+    def start_install(self):
+        try:
+            config = self._validated_settings()
+        except ValueError as error:
+            messagebox.showerror("Kurulum Hatası", str(error))
             return
-        self._begin_build(install_locally=False, output_path=output_path)
 
-    def _begin_build(self, install_locally, output_path=None):
-        if not os.path.exists(self.core_script):
-            messagebox.showerror("Hata", f"Kaynak kod bulunamadı!\n{self.core_script}")
-            return
-            
-        missing_wallpapers = [
-            path for path in self.selected_wallpapers
-            if not os.path.exists(path)
-        ]
-        if not self.selected_wallpapers or missing_wallpapers:
-            missing_text = "\n".join(missing_wallpapers[:5])
+        if not os.path.isfile(self.payload_exe):
             messagebox.showerror(
-                "Hata",
-                "Seçilen görsellerden bazıları bulunamadı!"
-                + (f"\n{missing_text}" if missing_text else ""),
+                "Kurulum Hatası",
+                "Kurulum paketinin içindeki Spiderpot uygulaması bulunamadı.",
             )
             return
 
-        interval_text = self.slide_interval_entry.get().strip().replace(",", ".")
-        try:
-            self.slide_interval_seconds = float(interval_text)
-        except ValueError:
-            messagebox.showerror("Hata", "Foto geçiş aralığı sayı olmalı. Örn: 5 veya 2,5")
-            return
-
-        if self.slide_interval_seconds <= 0:
-            messagebox.showerror("Hata", "Foto geçiş aralığı 0'dan büyük olmalı.")
-            return
-
-        self.btn_build.config(state=tk.DISABLED)
-        self.btn_portable.config(state=tk.DISABLED)
-        self.status_label.config(
-            text="Gerekli kütüphaneler kuruluyor ve EXE derleniyor...",
-            fg="blue",
-        )
-
+        self._set_busy(True, "Spiderpot kuruluyor...")
         threading.Thread(
-            target=self.build_exe,
-            args=(install_locally, output_path),
+            target=self._install,
+            args=(config,),
             daemon=True,
+            name="SpiderpotInstaller",
         ).start()
 
-    def build_exe(self, install_locally=True, output_path=None):
-        temp_script = None
-        slideshow_stage_dir = None
-        try:
-            desktop_path = self.get_desktop_path()
+    def _set_busy(self, busy, text=""):
+        state = tk.DISABLED if busy else tk.NORMAL
+        self.install_button.config(state=state)
+        self.uninstall_button.config(state=state)
+        self.status.config(text=text, fg="#0b63ce")
 
-            # Yalnızca "Bu PC'ye Kur" akışı mevcut kurulumu değiştirir.
-            if install_locally:
-                old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe", "BearPot.exe"]
-                for exe_name in old_exes:
-                    subprocess.run(f"taskkill /F /IM {exe_name}", shell=True, capture_output=True)
-                    old_path = os.path.join(desktop_path, exe_name)
-                    if os.path.exists(old_path):
-                        try:
-                            os.remove(old_path)
-                        except:
-                            pass
-
-                # Önce önceki otomatik başlangıç kayıtlarını temizle; seçim açıksa
-                # başarılı kurulumdan sonra güncel hedefle yeniden oluşturulacak.
-                try:
-                    import winreg
-                    with winreg.OpenKey(
-                        winreg.HKEY_CURRENT_USER,
-                        r"Software\Microsoft\Windows\CurrentVersion\Run",
-                        0,
-                        winreg.KEY_SET_VALUE,
-                    ) as key:
-                        try:
-                            winreg.DeleteValue(key, "Spiderpot_App")
-                        except FileNotFoundError:
-                            pass
-                except Exception:
-                    pass
-
-                try:
-                    old_shortcut = os.path.join(
-                        os.getenv("APPDATA"),
-                        "Microsoft",
-                        "Windows",
-                        "Start Menu",
-                        "Programs",
-                        "Startup",
-                        "Spiderpot.lnk",
-                    )
-                    if os.path.exists(old_shortcut):
-                        os.remove(old_shortcut)
-                except Exception:
-                    pass
-            
-            subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller", "opencv-python", "pynput", "pillow", "pystray", "screeninfo"], capture_output=True)
-            
-            with open(self.core_script, "r", encoding="utf-8") as f:
-                code = f.read()
-
-            # Replace keys
-            code = code.replace("self.key_spider = '1'", f"self.key_spider = '{self.k1_entry.get().strip().lower()}'")
-            code = code.replace("self.key_black = '2'", f"self.key_black = '{self.k2_entry.get().strip().lower()}'")
-            code = code.replace("self.key_lock = '3'", f"self.key_lock = '{self.k3_entry.get().strip().lower()}'")
-            code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
-            code = code.replace(
-                "SLIDESHOW_SECONDS = 5",
-                f"SLIDESHOW_SECONDS = {self.slide_interval_seconds!r}",
-            )
-
-            # Rename image references internally to the selected image's name so pyinstaller finds it easily
-            selected_wallpaper = self.selected_wallpapers[0]
-            selected_filename = os.path.basename(selected_wallpaper)
-            code = code.replace("spiderman3.jpg", selected_filename)
-
-            if self.auto_start_var.get():
-                auto_start_code = """
-try:
-    import sys, os, winreg
-    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
-        winreg.SetValueEx(key, "Spiderpot_App", 0, winreg.REG_SZ, sys.executable)
-except: pass
-"""
-                code = auto_start_code + "\n" + code
-
-            temp_script = os.path.join(self.build_dir, "Temp_Spiderpot.py")
-            with open(temp_script, "w", encoding="utf-8") as f:
-                f.write(code)
-
-            # Use the perfect transparent icon from Assets folder
-            icon_path = os.path.join(self.build_dir, "Assets", "spider_noir_icon.ico")
-            
-            # İlk seçilen görsel ana wallpaper olarak, diğerleri ise Ctrl+1 akışına
-            # sıralı ve benzersiz adlarla paketlenir.
-            add_data_arg = f"{selected_wallpaper};."
-            slideshow_stage_dir = tempfile.mkdtemp(
-                prefix="Spiderpot_Slayt_",
-                dir=self.build_dir,
-            )
-            selected_normalized = {
-                os.path.normcase(os.path.abspath(path))
-                for path in self.selected_wallpapers
-            }
-
-            for index, path in enumerate(self.selected_wallpapers[1:], start=1):
-                staged_name = f"{index:04d}_{os.path.basename(path)}"
-                shutil.copy2(path, os.path.join(slideshow_stage_dir, staged_name))
-
-            supported = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-            folder_index = len(self.selected_wallpapers)
-            if os.path.isdir(self.slideshow_dir):
-                for name in sorted(os.listdir(self.slideshow_dir), key=str.casefold):
-                    source = os.path.join(self.slideshow_dir, name)
-                    if (
-                        os.path.isfile(source)
-                        and os.path.splitext(name)[1].lower() in supported
-                        and os.path.normcase(os.path.abspath(source)) not in selected_normalized
-                    ):
-                        staged_name = f"{folder_index:04d}_{name}"
-                        shutil.copy2(source, os.path.join(slideshow_stage_dir, staged_name))
-                        folder_index += 1
-            
-            cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--noconsole", "--name", "Spiderpot_Sistem"]
-            if self.add_icon_var.get() and os.path.exists(icon_path):
-                cmd.append(f"--icon={icon_path}")
-            cmd.extend(["--add-data", add_data_arg])
-            if os.listdir(slideshow_stage_dir):
-                slideshow_data_arg = f"{slideshow_stage_dir};Slayt_Gorselleri"
-                cmd.extend(["--add-data", slideshow_data_arg])
-            cmd.append(temp_script)
-            
-            result = subprocess.run(
-                cmd,
+    def _stop_existing(self):
+        for executable in ("Spiderpot.exe", "Spiderpot_Sistem.exe", "BearPot.exe"):
+            subprocess.run(
+                ["taskkill", "/F", "/IM", executable],
                 capture_output=True,
-                text=True,
-                cwd=self.build_dir,
+                creationflags=CREATE_NO_WINDOW,
             )
 
-            if result.returncode == 0:
-                dist_dir = os.path.join(self.build_dir, "dist")
-                exe_path = os.path.join(dist_dir, "Spiderpot_Sistem.exe")
-                
-                if os.path.exists(exe_path):
-                    destination = (
-                        os.path.join(self.get_desktop_path(), "Spiderpot_Sistem.exe")
-                        if install_locally
-                        else output_path
-                    )
-                    self.replace_existing_exe(exe_path, destination)
+    def _remove_legacy_launchers(self):
+        desktop = get_desktop_path()
+        for executable in ("Spiderpot.exe", "Spiderpot_Sistem.exe", "BearPot.exe"):
+            legacy_path = os.path.abspath(os.path.join(desktop, executable))
+            installed_path = os.path.abspath(os.path.join(self.install_dir, "Spiderpot_Sistem.exe"))
+            if (
+                os.path.normcase(legacy_path) != os.path.normcase(installed_path)
+                and os.path.isfile(legacy_path)
+            ):
+                try:
+                    os.remove(legacy_path)
+                except OSError:
+                    pass
 
-                    if install_locally and self.auto_start_var.get():
-                        # Başlangıç (Startup) klasörüne kısayol ekle
-                        try:
-                            startup_folder = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-                            shortcut_path = os.path.join(startup_folder, "Spiderpot.lnk")
-                            ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{shortcut_path}');$s.TargetPath='{destination}';$s.WorkingDirectory='{self.get_desktop_path()}';$s.Save()"
-                            subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                        except:
-                            pass
+        startup_shortcut = os.path.join(
+            os.environ.get("APPDATA", ""),
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            "Startup",
+            "Spiderpot.lnk",
+        )
+        try:
+            if os.path.isfile(startup_shortcut):
+                os.remove(startup_shortcut)
+        except OSError:
+            pass
 
-                    self.root.after(
-                        0,
-                        self.finish_build,
-                        True,
-                        destination,
-                        install_locally,
-                    )
-                else:
-                    self.root.after(0, self.finish_build, False, "EXE bulunamadı.", install_locally)
+    def _install(self, config):
+        try:
+            import winreg
+
+            self._stop_existing()
+            self._remove_legacy_launchers()
+            os.makedirs(self.install_dir, exist_ok=True)
+
+            installed_exe = os.path.join(self.install_dir, "Spiderpot_Sistem.exe")
+            shutil.copy2(self.payload_exe, installed_exe)
+
+            wallpaper_dir = os.path.join(self.install_dir, "Wallpapers")
+            if os.path.isdir(wallpaper_dir):
+                shutil.rmtree(wallpaper_dir)
+            os.makedirs(wallpaper_dir, exist_ok=True)
+            for index, source in enumerate(self.selected_wallpapers, start=1):
+                extension = os.path.splitext(source)[1].lower()
+                if extension not in SUPPORTED_IMAGES:
+                    continue
+                destination = os.path.join(wallpaper_dir, f"{index:04d}{extension}")
+                shutil.copy2(source, destination)
+
+            config_path = os.path.join(self.install_dir, "config.json")
+            with open(config_path, "w", encoding="utf-8") as config_file:
+                json.dump(config, config_file, ensure_ascii=False, indent=2)
+
+            installed_setup = os.path.join(self.install_dir, "Spiderpot_Setup.exe")
+            if getattr(sys, "frozen", False):
+                if os.path.normcase(os.path.abspath(sys.executable)) != os.path.normcase(
+                    os.path.abspath(installed_setup)
+                ):
+                    shutil.copy2(sys.executable, installed_setup)
+
+            self._configure_startup(installed_exe)
+            self._create_shortcuts(installed_exe)
+            self._register_uninstaller(installed_exe, installed_setup)
+
+            if self.launch_after_install.get():
+                subprocess.Popen(
+                    [installed_exe],
+                    cwd=self.install_dir,
+                    close_fds=True,
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                )
+
+            self.root.after(0, self._install_finished, True, installed_exe)
+        except Exception as error:
+            self.root.after(0, self._install_finished, False, f"{type(error).__name__}: {error}")
+
+    def _configure_startup(self, installed_exe):
+        import winreg
+
+        run_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            run_path,
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            if self.auto_start.get():
+                winreg.SetValueEx(
+                    key,
+                    "Spiderpot_App",
+                    0,
+                    winreg.REG_SZ,
+                    f'"{installed_exe}"',
+                )
             else:
-                self.root.after(0, self.finish_build, False, result.stderr, install_locally)
-                
-        except Exception as e:
-            self.root.after(0, self.finish_build, False, str(e), install_locally)
-        finally:
-            if temp_script and os.path.exists(temp_script):
                 try:
-                    os.remove(temp_script)
-                except:
-                    pass
-            if slideshow_stage_dir and os.path.isdir(slideshow_stage_dir):
-                try:
-                    shutil.rmtree(slideshow_stage_dir)
-                except:
+                    winreg.DeleteValue(key, "Spiderpot_App")
+                except FileNotFoundError:
                     pass
 
-    def finish_build(self, success, message, install_locally=True):
-        self.btn_build.config(state=tk.NORMAL)
-        self.btn_portable.config(state=tk.NORMAL)
+    def _shortcut_paths(self):
+        appdata = os.environ.get("APPDATA", "")
+        start_menu_dir = os.path.join(
+            appdata,
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            APP_NAME,
+        )
+        return (
+            os.path.join(get_desktop_path(), f"{APP_NAME}.lnk"),
+            os.path.join(start_menu_dir, f"{APP_NAME}.lnk"),
+        )
+
+    def _create_shortcut(self, shortcut_path, target_path):
+        os.makedirs(os.path.dirname(shortcut_path), exist_ok=True)
+        script = (
+            "$w=New-Object -ComObject WScript.Shell;"
+            f"$s=$w.CreateShortcut({powershell_quote(shortcut_path)});"
+            f"$s.TargetPath={powershell_quote(target_path)};"
+            f"$s.WorkingDirectory={powershell_quote(self.install_dir)};"
+            f"$s.IconLocation={powershell_quote(target_path + ',0')};"
+            "$s.Save()"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Kısayol oluşturulamadı.")
+
+    def _create_shortcuts(self, installed_exe):
+        desktop_link, start_menu_link = self._shortcut_paths()
+        if self.desktop_shortcut.get():
+            self._create_shortcut(desktop_link, installed_exe)
+        elif os.path.exists(desktop_link):
+            os.remove(desktop_link)
+        self._create_shortcut(start_menu_link, installed_exe)
+
+    def _register_uninstaller(self, installed_exe, installed_setup):
+        import winreg
+
+        uninstall_path = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}"
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_path) as key:
+            values = {
+                "DisplayName": APP_NAME,
+                "DisplayVersion": APP_VERSION,
+                "Publisher": PUBLISHER,
+                "InstallLocation": self.install_dir,
+                "DisplayIcon": installed_exe,
+                "UninstallString": f'"{installed_setup}" --uninstall',
+            }
+            for name, value in values.items():
+                winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+            winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
+            try:
+                estimated_size = sum(
+                    os.path.getsize(os.path.join(root, file_name))
+                    for root, _, files in os.walk(self.install_dir)
+                    for file_name in files
+                ) // 1024
+                winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, estimated_size)
+            except Exception:
+                pass
+
+    def _install_finished(self, success, detail):
+        self._set_busy(False)
         if success:
-            self.status_label.config(text="Tamamlandı!", fg="green")
-            if install_locally:
-                messagebox.showinfo(
-                    "Başarılı",
-                    "Spiderpot bu bilgisayara kuruldu!\n"
-                    "EXE dosyası Masaüstüne kaydedildi.\n\n"
-                    "Eğer otomatik başlatmayı seçtiyseniz bilgisayar açıldığında "
-                    "kendiliğinden çalışacaktır.",
-                )
-                try:
-                    os.startfile(message)
-                except:
-                    pass
-            else:
-                messagebox.showinfo(
-                    "Başarılı",
-                    "Başka bilgisayara gönderilecek Spiderpot EXE hazır!\n\n"
-                    f"Kaydedilen dosya:\n{message}\n\n"
-                    "Bu bilgisayardaki mevcut Spiderpot değiştirilmedi ve yeni EXE çalıştırılmadı.",
-                )
-                try:
-                    os.startfile(os.path.dirname(message))
-                except:
-                    pass
+            self.status.config(text="Kurulum başarıyla tamamlandı.", fg="#198038")
+            messagebox.showinfo(
+                "Spiderpot Kuruldu",
+                "Spiderpot başarıyla kuruldu veya güncellendi.\n\n"
+                f"Konum:\n{detail}\n\n"
+                "Bu Setup EXE başka bir Windows bilgisayara tek başına gönderilebilir.",
+            )
         else:
-            self.status_label.config(text="Derleme hatası!", fg="red")
-            messagebox.showerror("Hata", f"Hata detayı:\n{message}")
+            self.status.config(text="Kurulum başarısız.", fg="#c1121f")
+            messagebox.showerror("Kurulum Hatası", detail)
+
+    def confirm_uninstall(self):
+        if not os.path.isdir(self.install_dir):
+            messagebox.showinfo("Spiderpot", "Bu kullanıcı için kurulu Spiderpot bulunamadı.")
+            return
+        if not messagebox.askyesno(
+            "Spiderpot'u Kaldır",
+            "Spiderpot uygulaması, kısayolları ve ayarları kaldırılsın mı?\n\n"
+            "Yakalanan fotoğraflar silinmeyecek.",
+        ):
+            return
+        self._set_busy(True, "Spiderpot kaldırılıyor...")
+        threading.Thread(target=self._uninstall, daemon=True, name="SpiderpotUninstaller").start()
+
+    def _uninstall(self):
+        try:
+            import winreg
+
+            self._stop_existing()
+
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Run",
+                    0,
+                    winreg.KEY_SET_VALUE,
+                ) as key:
+                    try:
+                        winreg.DeleteValue(key, "Spiderpot_App")
+                    except FileNotFoundError:
+                        pass
+            except FileNotFoundError:
+                pass
+
+            try:
+                winreg.DeleteKey(
+                    winreg.HKEY_CURRENT_USER,
+                    rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}",
+                )
+            except FileNotFoundError:
+                pass
+
+            for shortcut in self._shortcut_paths():
+                try:
+                    if os.path.exists(shortcut):
+                        os.remove(shortcut)
+                    parent = os.path.dirname(shortcut)
+                    if os.path.basename(parent) == APP_NAME and os.path.isdir(parent):
+                        os.rmdir(parent)
+                except Exception:
+                    pass
+
+            running_from_install_dir = (
+                getattr(sys, "frozen", False)
+                and os.path.commonpath(
+                    [os.path.abspath(sys.executable), self.install_dir]
+                )
+                == self.install_dir
+            )
+            if running_from_install_dir:
+                command = (
+                    "Start-Sleep -Seconds 2;"
+                    f"Remove-Item -LiteralPath {powershell_quote(self.install_dir)} "
+                    "-Recurse -Force -ErrorAction SilentlyContinue"
+                )
+                subprocess.Popen(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                    close_fds=True,
+                    creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS,
+                )
+            elif os.path.isdir(self.install_dir):
+                shutil.rmtree(self.install_dir)
+
+            self.root.after(0, self._uninstall_finished, True, "")
+        except Exception as error:
+            self.root.after(0, self._uninstall_finished, False, f"{type(error).__name__}: {error}")
+
+    def _uninstall_finished(self, success, detail):
+        self._set_busy(False)
+        if success:
+            messagebox.showinfo(
+                "Spiderpot Kaldırıldı",
+                "Spiderpot kaldırıldı. Yakalanan fotoğraflar korunmuştur.",
+            )
+            self.root.destroy()
+        else:
+            self.status.config(text="Kaldırma başarısız.", fg="#c1121f")
+            messagebox.showerror("Kaldırma Hatası", detail)
+
+
+def main():
+    root = tk.Tk()
+    app = SpiderpotInstaller(root)
+    if "--uninstall" in sys.argv:
+        root.after(200, app.confirm_uninstall)
+    root.mainloop()
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = SpiderpotBuilderApp(root)
-    root.mainloop()
+    main()

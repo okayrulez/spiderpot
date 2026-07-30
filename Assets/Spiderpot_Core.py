@@ -9,6 +9,8 @@ import winreg
 import tkinter as tk
 import threading
 import tempfile
+import json
+import subprocess
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 ES_CONTINUOUS = 0x80000000
@@ -39,40 +41,38 @@ def set_dpi_awareness():
     except Exception:
         pass
 
-def set_antigravity_mode(active=True):
-    try:
-        # Check if admin first, otherwise skip to prevent errors/crashes
-        if not ctypes.windll.shell32.IsUserAnAdmin():
-            print("[!] Yönetici izni yok, AntiGravity modu (USB Engelleyici) atlandı.")
-            return
-            
-        if active:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USBSTOR", 0, winreg.KEY_SET_VALUE) as key:
-                winreg.SetValueEx(key, "Start", 0, winreg.REG_DWORD, 4)
-            try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions", 0, winreg.KEY_SET_VALUE)
-            except FileNotFoundError:
-                key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions")
-            winreg.SetValueEx(key, "DenyUnspecified", 0, winreg.REG_DWORD, 1)
-            winreg.CloseKey(key)
-        else:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USBSTOR", 0, winreg.KEY_SET_VALUE) as key:
-                winreg.SetValueEx(key, "Start", 0, winreg.REG_DWORD, 3)
-            try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions", 0, winreg.KEY_SET_VALUE)
-            except FileNotFoundError:
-                key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions")
-            winreg.SetValueEx(key, "DenyUnspecified", 0, winreg.REG_DWORD, 0)
-            winreg.CloseKey(key)
-    except Exception as e:
-        print(f"[!] AntiGravity Hatası: {e}")
-
 def get_desktop_path():
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders")
         return winreg.QueryValueEx(key, "Desktop")[0]
     except:
         return os.path.join(os.path.expanduser("~"), "Desktop")
+
+def get_app_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_user_data_dir():
+    local_app_data = os.environ.get(
+        "LOCALAPPDATA",
+        os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+    )
+    return os.path.abspath(os.path.join(local_app_data, "Spiderpot"))
+
+def load_runtime_config():
+    for config_path in (
+        os.path.join(get_user_data_dir(), "config.json"),
+        os.path.join(get_app_dir(), "config.json"),
+    ):
+        try:
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                data = json.load(config_file)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
 
 try:
     from screeninfo import get_monitors
@@ -85,8 +85,9 @@ class SpiderpotViewer:
     SLIDESHOW_FADE_STEPS = 10
     SLIDESHOW_FADE_DELAY_MS = 45
 
-    def __init__(self, parent):
+    def __init__(self, parent, runtime_config=None):
         self.parent = parent
+        self.runtime_config = runtime_config or {}
         self.windows = []
         self.labels = []
         self.photo_images = []
@@ -103,9 +104,43 @@ class SpiderpotViewer:
             base_dir = sys._MEIPASS
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            
-        self.image_path = os.path.join(base_dir, "spiderman3.jpg")
-        self.slideshow_dir = os.path.join(base_dir, "Slayt_Gorselleri")
+
+        supported = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+        external_wallpapers = []
+        external_wallpaper_dir = None
+        for candidate_dir in (
+            os.path.join(get_user_data_dir(), "Wallpapers"),
+            os.path.join(get_app_dir(), "Wallpapers"),
+        ):
+            try:
+                candidate_wallpapers = [
+                    os.path.join(candidate_dir, name)
+                    for name in sorted(os.listdir(candidate_dir), key=str.casefold)
+                    if (
+                        os.path.isfile(os.path.join(candidate_dir, name))
+                        and os.path.splitext(name)[1].lower() in supported
+                    )
+                ]
+            except Exception:
+                candidate_wallpapers = []
+            if candidate_wallpapers:
+                external_wallpapers = candidate_wallpapers
+                external_wallpaper_dir = candidate_dir
+                break
+
+        if external_wallpapers:
+            self.image_path = external_wallpapers[0]
+            self.slideshow_dir = external_wallpaper_dir
+        else:
+            self.image_path = os.path.join(base_dir, "spider_noir.jpg")
+            self.slideshow_dir = os.path.join(base_dir, "Slayt_Gorselleri")
+
+        try:
+            interval = float(self.runtime_config.get("slideshow_seconds", self.SLIDESHOW_SECONDS))
+            if interval > 0:
+                self.SLIDESHOW_SECONDS = interval
+        except (TypeError, ValueError):
+            pass
         self._last_signature = None
         self.rebuild()
 
@@ -449,6 +484,8 @@ class SpiderpotApp:
     def __init__(self, root):
         self.root = root
         self.root.withdraw()
+        self.runtime_config = load_runtime_config()
+        self.camera_consent = bool(self.runtime_config.get("camera_consent", False))
         
         self.is_active = False
         self.active_mode = None
@@ -461,6 +498,8 @@ class SpiderpotApp:
         self.camera_port = 0
         self.camera_ports_to_try = [0, 1, 2, 3, 4]
         self.capture_lock = threading.Lock()
+        self.capture_request_lock = threading.Lock()
+        self.capture_in_progress = False
         
         desktop_path = get_desktop_path()
         app_dir = (
@@ -490,16 +529,17 @@ class SpiderpotApp:
             except Exception:
                 pass
 
-        self.viewer = SpiderpotViewer(self.root)
+        self.viewer = SpiderpotViewer(self.root, self.runtime_config)
         
         self.mouse_listener = None
         self.input_listener = None
+        self.keyboard_block_listener = None
         
-        self.key_spider = '1'
-        self.key_black = '2'
-        self.key_lock = '3'
+        self.key_spider = str(self.runtime_config.get("key_spider", "1"))
+        self.key_black = str(self.runtime_config.get("key_black", "2"))
+        self.key_lock = str(self.runtime_config.get("key_lock", "3"))
         # To handle both local and built versions
-        self.key_exit = 'f12'
+        self.key_exit = str(self.runtime_config.get("key_exit", "f12"))
         
         # Kullanıcının seçtiği tuşları çalışma anında çözümle (vk + özel tuş nesnesi)
         self._resolve_hotkeys()
@@ -513,9 +553,6 @@ class SpiderpotApp:
         self.input_listener = keyboard.Listener(on_press=self.on_global_press)
         self.input_listener.start()
         
-        # Bilgisayarı açık tutma protokolü
-        prevent_sleep()
-
     def _init_camera(self):
         try:
             with self.capture_lock:
@@ -735,7 +772,11 @@ class SpiderpotApp:
         def on_exit(icon, item):
             self.root.after(0, self.real_quit)
 
+        def on_settings(icon, item):
+            self.root.after(0, self.open_settings)
+
         menu = pystray.Menu(
+            TrayItem("Ayarlar ve Gizlilik", on_settings),
             TrayItem("Sistemi Tamamen Kapat", on_exit)
         )
         self.tray_icon = pystray.Icon("Spiderpot", create_icon_image("red"), "Spiderpot (Pasif)", menu=menu)
@@ -756,6 +797,10 @@ class SpiderpotApp:
             self.tray_icon.title = f"Spiderpot ({status})"
 
     def capture_photo(self):
+        if not self.camera_consent:
+            self._log_error("Kamera cekimi atlandi: kullanici onayi yok.")
+            return
+
         captured_path = None
         with self.capture_lock:
             current_time = time.time()
@@ -786,6 +831,29 @@ class SpiderpotApp:
         if captured_path:
             self.root.after(0, lambda path=captured_path: self._show_capture_feedback(path))
 
+    def request_capture(self):
+        """Klavye/fare kancasını bekletmeden çekimi arka planda başlat."""
+        if not self.is_active:
+            return
+
+        with self.capture_request_lock:
+            if self.capture_in_progress:
+                return
+            if time.time() - self.last_capture_time < self.cooldown_seconds:
+                return
+            self.capture_in_progress = True
+
+        def worker():
+            try:
+                self.capture_photo()
+            except Exception as e:
+                self._log_error("Arka plan foto cekimi basarisiz.", error=e)
+            finally:
+                with self.capture_request_lock:
+                    self.capture_in_progress = False
+
+        threading.Thread(target=worker, daemon=True, name="SpiderpotCapture").start()
+
     def _show_capture_feedback(self, image_path):
         if not self.is_active:
             return
@@ -813,13 +881,16 @@ class SpiderpotApp:
             self.viewer.show_mode(mode_spider=(self.active_mode == 'spider'))
 
     def on_move(self, x, y):
-        if self.is_active: self.capture_photo()
+        if self.is_active:
+            self.request_capture()
 
     def on_click(self, x, y, button, pressed):
-        if self.is_active and pressed: self.capture_photo()
+        if self.is_active and pressed:
+            self.request_capture()
 
     def on_scroll(self, x, y, dx, dy):
-        if self.is_active: self.capture_photo()
+        if self.is_active:
+            self.request_capture()
 
     def on_global_press(self, key):
         # 1) Gizli çıkış (kapatma) tuşu -> her zaman sistemi durdurur.
@@ -841,15 +912,50 @@ class SpiderpotApp:
 
         # 3) Sistem aktifken diğer her tuş -> izinsiz giriş, fotoğraf çek.
         if self.is_active and key not in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-            self.capture_photo()
+            self.request_capture()
+
+    def on_locked_key_press(self, key):
+        """Aktif tuzakta tuşu Windows'a iletmeden yakala."""
+        if self.exit_key is not None and key == self.exit_key:
+            self.root.after(0, self.stop_system)
+            return False
+        if self.is_active and key not in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+            self.request_capture()
 
     def start_system(self, mode):
         if not self.is_active:
-            self.mouse_listener = mouse.Listener(on_move=self.on_move, on_click=self.on_click, on_scroll=self.on_scroll, suppress=True)
-            self.mouse_listener.start()
-            
-            # Start antigravity asynchronously so registry logic doesn't block the screen popup
-            threading.Thread(target=set_antigravity_mode, args=(True,), daemon=True).start()
+            prevent_sleep()
+            try:
+                self.mouse_listener = mouse.Listener(
+                    on_move=self.on_move,
+                    on_click=self.on_click,
+                    on_scroll=self.on_scroll,
+                    suppress=True,
+                )
+                self.mouse_listener.start()
+                self._log_error(
+                    "Fare kilidi baslatildi.",
+                    listener_running=self.mouse_listener.running,
+                    mode=mode,
+                )
+            except Exception as e:
+                self.mouse_listener = None
+                self._log_error("Fare kilidi baslatilamadi.", mode=mode, error=e)
+
+            try:
+                self.keyboard_block_listener = keyboard.Listener(
+                    on_press=self.on_locked_key_press,
+                    suppress=True,
+                )
+                self.keyboard_block_listener.start()
+                self._log_error(
+                    "Klavye kilidi baslatildi.",
+                    listener_running=self.keyboard_block_listener.running,
+                    mode=mode,
+                )
+            except Exception as e:
+                self.keyboard_block_listener = None
+                self._log_error("Klavye kilidi baslatilamadi.", mode=mode, error=e)
 
         self.is_active = True
         self.active_mode = mode
@@ -872,12 +978,23 @@ class SpiderpotApp:
         self.update_tray_icon()
         self.viewer.hide()
         
-        # Asenkron kapat ki anında tepki versin
-        threading.Thread(target=set_antigravity_mode, args=(False,), daemon=True).start()
+        allow_sleep()
 
         if self.mouse_listener:
-            try: self.mouse_listener.stop()
-            except: pass
+            try:
+                self.mouse_listener.stop()
+                self._log_error("Fare kilidi durduruldu.")
+            except Exception as e:
+                self._log_error("Fare kilidi durdurulamadi.", error=e)
+            self.mouse_listener = None
+
+        if self.keyboard_block_listener:
+            try:
+                self.keyboard_block_listener.stop()
+                self._log_error("Klavye kilidi durduruldu.")
+            except Exception as e:
+                self._log_error("Klavye kilidi durdurulamadi.", error=e)
+            self.keyboard_block_listener = None
         
         # Kamerayı asenkron kapat ki ışık sönsün ve program kilitlenmesin
         def _release_cam():
@@ -888,15 +1005,37 @@ class SpiderpotApp:
     def lock_screen(self):
         ctypes.windll.user32.LockWorkStation()
 
+    def open_settings(self):
+        settings_exe = os.path.join(get_app_dir(), "Spiderpot_Ayarlar.exe")
+        if not os.path.isfile(settings_exe):
+            self._log_error("Ayarlar uygulamasi bulunamadi.", path=settings_exe)
+            return
+        try:
+            subprocess.Popen(
+                [settings_exe],
+                cwd=get_app_dir(),
+                close_fds=True,
+                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
+            )
+        except Exception as e:
+            self._log_error("Ayarlar uygulamasi acilamadi.", path=settings_exe, error=e)
+
     def real_quit(self):
         allow_sleep()
         self.stop_system()
         if self.input_listener:
             try: self.input_listener.stop()
             except: pass
-        if self.mouse_listener:
-            try: self.mouse_listener.stop()
+        if self.keyboard_block_listener:
+            try: self.keyboard_block_listener.stop()
             except: pass
+        if self.mouse_listener:
+            try:
+                self.mouse_listener.stop()
+                self._log_error("Fare kilidi durduruldu.")
+            except Exception as e:
+                self._log_error("Fare kilidi durdurulamadi.", error=e)
+            self.mouse_listener = None
         if hasattr(self, 'tray_icon') and self.tray_icon:
             try: self.tray_icon.stop()
             except: pass

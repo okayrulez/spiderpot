@@ -1,4 +1,7 @@
 build/
+_build*/
+_msix_layout/
+_msix_verify/
 dist/
 *.spec
 __pycache__/
