@@ -63,14 +63,30 @@ class SpiderpotInstaller:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{APP_NAME} Kurulum")
-        self.root.geometry("780x590")
-        self.root.resizable(False, False)
+        self._configure_window_size()
         self._set_window_icon()
         self.install_dir = get_install_dir()
         self.payload_exe = resource_path("Payload", "Spiderpot_Sistem.exe")
         self.default_wallpaper = resource_path("Assets", "spider_noir.jpg")
         self.selected_wallpapers = [self.default_wallpaper]
         self._build_ui()
+
+    def _configure_window_size(self):
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.window_width = min(1000, max(780, screen_width - 80))
+        self.window_height = min(720, max(660, screen_height - 80))
+        self.hero_width = max(265, min(320, int(self.window_width * 0.32)))
+        position_x = max(0, (screen_width - self.window_width) // 2)
+        position_y = max(0, (screen_height - self.window_height) // 2 - 12)
+        self.root.geometry(
+            f"{self.window_width}x{self.window_height}+{position_x}+{position_y}"
+        )
+        self.root.minsize(
+            min(860, self.window_width),
+            min(660, self.window_height),
+        )
+        self.root.resizable(True, True)
 
     def _set_window_icon(self):
         icon_path = resource_path("Assets", "spider_noir_icon.ico")
@@ -97,14 +113,14 @@ class SpiderpotInstaller:
         container = tk.Frame(self.root, bg="#101114")
         container.pack(fill=tk.BOTH, expand=True)
 
-        left = tk.Frame(container, bg="black", width=265)
+        left = tk.Frame(container, bg="black", width=self.hero_width)
         left.pack(side=tk.LEFT, fill=tk.Y)
         left.pack_propagate(False)
         try:
             from PIL import Image, ImageTk
 
             image = Image.open(self.default_wallpaper).convert("RGB")
-            target_w, target_h = 265, 590
+            target_w, target_h = self.hero_width, self.window_height
             image_ratio = image.width / image.height
             target_ratio = target_w / target_h
             if image_ratio > target_ratio:
@@ -136,14 +152,14 @@ class SpiderpotInstaller:
             font=("Segoe UI", 18, "bold"),
             bg="white",
             fg="#bd1111",
-        ).pack(pady=(18, 2))
+        ).pack(pady=(14, 2))
         tk.Label(
             right,
             text=f"Sürüm {APP_VERSION} • Python gerekmez • Kullanıcı başına kurulum",
             font=("Segoe UI", 9),
             bg="white",
             fg="#666666",
-        ).pack(pady=(0, 12))
+        ).pack(pady=(0, 8))
 
         settings = tk.Frame(right, bg="white")
         settings.pack(fill=tk.X, padx=24)
@@ -182,7 +198,7 @@ class SpiderpotInstaller:
         self.interval_entry.insert(0, "5")
         self.interval_entry.pack(side=tk.RIGHT)
 
-        ttk.Separator(settings).pack(fill=tk.X, pady=12)
+        ttk.Separator(settings).pack(fill=tk.X, pady=9)
         tk.Label(
             settings,
             text="Kısayollar (Ctrl ile çalışır)",
@@ -223,7 +239,7 @@ class SpiderpotInstaller:
         self.key_exit.set("f12")
         self.key_exit.pack(side=tk.RIGHT)
 
-        ttk.Separator(settings).pack(fill=tk.X, pady=12)
+        ttk.Separator(settings).pack(fill=tk.X, pady=9)
 
         self.auto_start = tk.BooleanVar(value=True)
         self.desktop_shortcut = tk.BooleanVar(value=True)
@@ -243,10 +259,10 @@ class SpiderpotInstaller:
             ).pack(anchor="w", pady=2)
 
         self.status = tk.Label(right, text="", bg="white", fg="#0b63ce", font=("Segoe UI", 9))
-        self.status.pack(pady=(12, 4))
+        self.status.pack(pady=(8, 3))
 
         buttons = tk.Frame(right, bg="white")
-        buttons.pack(pady=8)
+        buttons.pack(pady=6)
         self.install_button = ttk.Button(
             buttons,
             text="Spiderpot'u Kur / Güncelle",
@@ -266,8 +282,8 @@ class SpiderpotInstaller:
             bg="white",
             fg="#777777",
             font=("Segoe UI", 8),
-            wraplength=460,
-        ).pack(pady=(4, 0))
+            wraplength=max(460, self.window_width - self.hero_width - 90),
+        ).pack(pady=(2, 0))
 
     def _key_row(self, parent, label, default):
         row = tk.Frame(parent, bg="white")
