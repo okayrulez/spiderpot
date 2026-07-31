@@ -1,3 +1,4 @@
+import ctypes
 import json
 import os
 import shutil
@@ -9,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 
 APP_NAME = "Spiderpot"
-APP_VERSION = "2026.07.30"
+APP_VERSION = "2026.07.31"
 PUBLISHER = "Spiderpot"
 SUPPORTED_IMAGES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -20,6 +21,17 @@ CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 def resource_path(*parts):
     base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_dir, *parts)
+
+
+def configure_windows_app_identity():
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "Spiderpot.Setup"
+        )
+    except Exception:
+        pass
 
 
 def get_desktop_path():
@@ -53,11 +65,27 @@ class SpiderpotInstaller:
         self.root.title(f"{APP_NAME} Kurulum")
         self.root.geometry("780x590")
         self.root.resizable(False, False)
+        self._set_window_icon()
         self.install_dir = get_install_dir()
         self.payload_exe = resource_path("Payload", "Spiderpot_Sistem.exe")
         self.default_wallpaper = resource_path("Assets", "spider_noir.jpg")
         self.selected_wallpapers = [self.default_wallpaper]
         self._build_ui()
+
+    def _set_window_icon(self):
+        icon_path = resource_path("Assets", "spider_noir_icon.ico")
+        try:
+            self.root.iconbitmap(default=icon_path)
+            return
+        except Exception:
+            pass
+        try:
+            self.window_icon = tk.PhotoImage(
+                file=resource_path("Assets", "spider_noir_icon.png")
+            )
+            self.root.iconphoto(True, self.window_icon)
+        except Exception:
+            pass
 
     def _build_ui(self):
         try:
@@ -602,6 +630,7 @@ class SpiderpotInstaller:
 
 
 def main():
+    configure_windows_app_identity()
     root = tk.Tk()
     app = SpiderpotInstaller(root)
     if "--uninstall" in sys.argv:
