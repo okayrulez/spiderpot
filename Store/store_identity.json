@@ -1,0 +1,9 @@
+{
+  "identity_name": "Spiderpot.Desktop.Placeholder",
+  "publisher": "CN=Spiderpot Development",
+  "publisher_display_name": "Spiderpot Development",
+  "display_name": "Spiderpot",
+  "description": "Yerel ekran tuzağı ve masaüstü güvenlik yardımcı uygulaması.",
+  "version": "1.0.0.0",
+  "architecture": "x64"
+}
