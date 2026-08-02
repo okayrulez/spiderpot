@@ -495,8 +495,17 @@ class SpiderpotApp:
         self.cooldown_seconds = 3
         self.capture_feedback_ms = 3000
         self.capture_feedback_job = None
-        self.camera_port = 0
-        self.camera_ports_to_try = [0, 1, 2, 3, 4]
+        configured_camera_port = self.runtime_config.get("camera_index")
+        try:
+            self.camera_port = int(configured_camera_port)
+        except (TypeError, ValueError):
+            self.camera_port = 0
+            configured_camera_port = None
+        self.camera_ports_to_try = (
+            [self.camera_port]
+            if configured_camera_port is not None
+            else [0, 1, 2, 3, 4]
+        )
         self.capture_lock = threading.Lock()
         self.capture_request_lock = threading.Lock()
         self.capture_in_progress = False

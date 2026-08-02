@@ -33,12 +33,18 @@ Uygulama aktifken bilgisayarı tekrar kullanabilmek için sadece sizin bildiğin
 ## 🛠️ Nasıl Kurulur?
 1. `dist/Spiderpot_Setup.exe` dosyasını kurulacak Windows bilgisayarına kopyalayın ve açın. Hedef bilgisayarda Python veya geliştirme aracı gerekmez.
 2. **Görselleri Seç** düğmesiyle istediğiniz sayıda Ctrl+1 görseli belirleyin ve geçiş süresini girin.
-3. Kısayolları ve otomatik başlangıç seçeneklerini ayarlayıp **Spiderpot'u Kur / Güncelle** düğmesine basın.
-4. Uygulama `%LOCALAPPDATA%\Programs\Spiderpot` klasörüne kurulur. Masaüstü ve Başlat menüsü kısayolları oluşturulur; seçildiyse Windows başlangıcına eklenir.
-5. Spiderpot, Windows **Yüklü uygulamalar** ekranından veya Setup içindeki **Kaldır** düğmesinden kaldırılabilir. Yakalanan fotoğraflar kaldırma sırasında korunur.
+3. Fotoğraf özelliğini kullanacaksanız **Kameraları Tara** düğmesine basın, aygıtı seçin, **Test Et** ile yerel önizlemeyi doğrulayın ve kamera onay kutusunu açık bırakın.
+4. Kısayolları ve otomatik başlangıç seçeneklerini ayarlayıp **Spiderpot'u Kur / Güncelle** düğmesine basın.
+5. Uygulama `%LOCALAPPDATA%\Programs\Spiderpot` klasörüne kurulur. Masaüstü ve Başlat menüsü kısayolları oluşturulur. Otomatik başlatma seçildiyse doğrulanan kullanıcı `Run` kaydı ve yedek Başlangıç kısayolu birlikte oluşturulur.
+6. Spiderpot, Windows **Yüklü uygulamalar** ekranından veya Setup içindeki **Kaldır** düğmesinden kaldırılabilir. Yakalanan fotoğraflar kaldırma sırasında korunur.
 
 ## 📦 Kurulum Sihirbazını EXE Yapma
 `python Build_Setup_Exe.py` önce güncel `Spiderpot_Sistem.exe` dosyasını üretir, ardından onu kurulum paketinin içine gömerek `dist/Spiderpot_Setup.exe` oluşturur. Ortaya çıkan Setup tek başına başka bir Windows bilgisayarına gönderilebilir.
+
+Setup içindeki **Başka PC İçin Setup EXE Oluştur** düğmesi de çalışan tam
+kurulum paketini seçtiğiniz konuma `Spiderpot_Setup.exe` adıyla çıkarır. Dağıtılan
+dosya yalnızca bu Setup'tır; kurulumdan sonra oluşan `Spiderpot_Sistem.exe`
+ayrıca gönderilmez.
 
 ## 🏪 Microsoft Store / Ücretsiz İmzalama
 

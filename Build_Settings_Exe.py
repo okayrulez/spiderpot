@@ -11,7 +11,15 @@ def main():
     manifest_path = os.path.join(assets_dir, "Spiderpot.exe.manifest")
 
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "pyinstaller", "pillow"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "pyinstaller",
+            "pillow",
+            "opencv-python",
+        ],
         check=True,
     )
 

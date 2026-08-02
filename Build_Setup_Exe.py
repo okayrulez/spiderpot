@@ -9,9 +9,15 @@ def main():
     icon_path = os.path.join(assets_dir, "spider_noir_icon.ico")
     manifest_path = os.path.join(assets_dir, "Spiderpot.exe.manifest")
     payload_path = os.path.join(root_dir, "dist", "Spiderpot_Sistem.exe")
+    settings_payload_path = os.path.join(root_dir, "dist", "Spiderpot_Ayarlar.exe")
 
     subprocess.run(
         [sys.executable, os.path.join(root_dir, "Build_System_Exe.py")],
+        check=True,
+        cwd=root_dir,
+    )
+    subprocess.run(
+        [sys.executable, os.path.join(root_dir, "Build_Settings_Exe.py")],
         check=True,
         cwd=root_dir,
     )
@@ -44,6 +50,8 @@ def main():
         f"{assets_dir};Assets",
         "--add-data",
         f"{payload_path};Payload",
+        "--add-data",
+        f"{settings_payload_path};Payload",
     ]
     if os.path.exists(icon_path):
         cmd.append(f"--icon={icon_path}")

@@ -3,8 +3,11 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+from camera_tools import capture_camera_frame, scan_camera_devices
 
 
 APP_VERSION = "1.0.0"
@@ -52,11 +55,19 @@ class SpiderpotSettings:
     def __init__(self, root):
         self.root = root
         self.root.title("Spiderpot Ayarlar ve Gizlilik")
-        self.root.geometry("760x680")
-        self.root.resizable(False, False)
+        self.root.geometry("900x720")
+        self.root.minsize(820, 680)
+        self.root.resizable(True, True)
         self.config = load_config()
         self.default_wallpaper = resource_path("Assets", "spider_noir.jpg")
         self.selected_wallpapers = self._existing_wallpapers() or [self.default_wallpaper]
+        try:
+            configured_camera = int(self.config.get("camera_index", 0))
+        except (TypeError, ValueError):
+            configured_camera = 0
+        self.camera_options = {
+            f"Kamera {configured_camera} — kayıtlı aygıt": configured_camera
+        }
         self._build_ui()
 
     def _existing_wallpapers(self):
@@ -146,6 +157,39 @@ class SpiderpotSettings:
             fg="#666666",
             font=("Segoe UI", 8),
         ).pack(anchor="w", padx=(22, 0))
+
+        camera_row = tk.Frame(privacy, bg="white")
+        camera_row.pack(fill=tk.X, pady=(9, 0))
+        tk.Label(
+            camera_row,
+            text="Kamera aygıtı",
+            bg="white",
+            font=("Segoe UI", 9, "bold"),
+        ).pack(side=tk.LEFT)
+        self.camera_device = ttk.Combobox(
+            camera_row,
+            values=list(self.camera_options),
+            state="readonly",
+            width=34,
+        )
+        self.camera_device.set(next(iter(self.camera_options)))
+        self.camera_device.pack(side=tk.LEFT, padx=10)
+        self.camera_device.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.camera_consent.set(True),
+        )
+        self.camera_test_button = ttk.Button(
+            camera_row,
+            text="Test Et",
+            command=self.test_selected_camera,
+        )
+        self.camera_test_button.pack(side=tk.RIGHT)
+        self.camera_scan_button = ttk.Button(
+            camera_row,
+            text="Kameraları Tara",
+            command=self.scan_cameras,
+        )
+        self.camera_scan_button.pack(side=tk.RIGHT, padx=(0, 6))
 
         settings = tk.LabelFrame(
             body,
@@ -254,6 +298,119 @@ class SpiderpotSettings:
             self.selected_wallpapers = list(paths)
             self.image_count_label.config(text=f"{len(paths)} görsel")
 
+    def _selected_camera_index(self):
+        label = self.camera_device.get().strip()
+        if label not in self.camera_options:
+            raise ValueError("Lütfen listeden bir kamera aygıtı seçin.")
+        return int(self.camera_options[label])
+
+    def _set_camera_busy(self, busy, text=""):
+        state = tk.DISABLED if busy else tk.NORMAL
+        self.camera_scan_button.config(state=state)
+        self.camera_test_button.config(state=state)
+        if text:
+            self.status.config(text=text, fg="#0b63ce")
+
+    def scan_cameras(self):
+        self._set_camera_busy(True, "Kameralar taranıyor; ışık kısa süre yanabilir...")
+
+        def worker():
+            try:
+                devices = scan_camera_devices(max_devices=8)
+                self.root.after(0, self._finish_camera_scan, devices, None)
+            except Exception as error:
+                self.root.after(0, self._finish_camera_scan, [], error)
+
+        threading.Thread(target=worker, daemon=True, name="SpiderpotCameraScan").start()
+
+    def _finish_camera_scan(self, devices, error):
+        self._set_camera_busy(False)
+        if error:
+            self.status.config(text="Kamera taraması başarısız.", fg="#c1121f")
+            messagebox.showerror("Kamera Taraması", str(error))
+            return
+        if not devices:
+            self.status.config(text="Çalışan kamera bulunamadı.", fg="#c1121f")
+            messagebox.showwarning(
+                "Kamera Taraması",
+                "Çalışan kamera bulunamadı. Windows kamera iznini ve aygıt bağlantısını kontrol edin.",
+            )
+            return
+
+        self.camera_options = {
+            device["label"]: int(device["index"])
+            for device in devices
+        }
+        labels = list(self.camera_options)
+        self.camera_device.config(values=labels)
+        self.camera_device.set(labels[0])
+        self.camera_consent.set(True)
+        self.status.config(
+            text=f"{len(labels)} çalışan kamera bulundu. Birini seçip Test Et'e basın.",
+            fg="#198038",
+        )
+
+    def test_selected_camera(self):
+        try:
+            camera_index = self._selected_camera_index()
+        except ValueError as error:
+            messagebox.showerror("Kamera Testi", str(error))
+            return
+        self._set_camera_busy(True, f"Kamera {camera_index} test ediliyor...")
+
+        def worker():
+            try:
+                frame, backend_name = capture_camera_frame(camera_index)
+                self.root.after(
+                    0,
+                    self._finish_camera_test,
+                    camera_index,
+                    frame,
+                    backend_name,
+                    None,
+                )
+            except Exception as error:
+                self.root.after(
+                    0,
+                    self._finish_camera_test,
+                    camera_index,
+                    None,
+                    None,
+                    error,
+                )
+
+        threading.Thread(target=worker, daemon=True, name="SpiderpotCameraTest").start()
+
+    def _finish_camera_test(self, camera_index, frame, backend_name, error):
+        self._set_camera_busy(False)
+        if error:
+            self.status.config(text=f"Kamera {camera_index} test edilemedi.", fg="#c1121f")
+            messagebox.showerror("Kamera Testi", str(error))
+            return
+
+        from PIL import Image, ImageTk
+
+        image = Image.fromarray(frame[:, :, ::-1])
+        image.thumbnail((720, 480), Image.Resampling.LANCZOS)
+        preview = tk.Toplevel(self.root)
+        preview.title(f"Spiderpot Kamera Testi — Kamera {camera_index}")
+        preview.configure(bg="#101114")
+        photo = ImageTk.PhotoImage(image)
+        preview.preview_photo = photo
+        tk.Label(preview, image=photo, bg="#101114").pack(padx=12, pady=(12, 6))
+        tk.Label(
+            preview,
+            text=f"Kamera {camera_index} çalışıyor • {backend_name} • Bu görüntü kaydedilmedi.",
+            bg="#101114",
+            fg="white",
+            font=("Segoe UI", 9),
+        ).pack(pady=(0, 8))
+        ttk.Button(preview, text="Kapat", command=preview.destroy).pack(pady=(0, 12))
+        preview.transient(self.root)
+        preview.grab_set()
+        self.camera_consent.set(True)
+        self.status.config(text=f"Kamera {camera_index} testi başarılı.", fg="#198038")
+
     def _validated_config(self):
         try:
             interval = float(self.interval_entry.get().strip().replace(",", "."))
@@ -277,6 +434,12 @@ class SpiderpotSettings:
             **keys,
             "slideshow_seconds": interval,
             "camera_consent": bool(self.camera_consent.get()),
+            "camera_index": self._selected_camera_index(),
+            "auto_start": bool(self.config.get("auto_start", True)),
+            "desktop_shortcut": bool(self.config.get("desktop_shortcut", True)),
+            "launch_after_install": bool(
+                self.config.get("launch_after_install", True)
+            ),
             "version": APP_VERSION,
         }
 
