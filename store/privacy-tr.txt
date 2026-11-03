@@ -1,0 +1,27 @@
+Spiderpot Gizlilik Politikası
+Sürüm 1.0.0 · 3 Kasım 2026
+
+Geliştirici: Okay Dedeoğlu
+Destek ve gizlilik talepleri: https://github.com/okayrulez/spiderpot/issues
+Kamuya açık destek kaydına fotoğraf veya başka kişisel veri eklemeyin.
+
+Spiderpot, kullanıcı tarafından başlatılan masaüstü tuzaklarını çalıştırır. Ctrl+1 seçilen fotoğrafı açar, Ctrl+2 siyah ekran açar ve Ctrl+3 mevcut masaüstü görünümünü değiştirmeden tuzağı etkinleştirir. Çıkış tuşu varsayılan olarak F12'dir. Tuzağı durdurmak kamerayı ve fare engellemesini kapatır. Windows oturum kilidinin yerine geçmez.
+
+Kamera kullanımı
+Kamera varsayılan kapalıdır. İlk yapılandırmada ayrı kamera seçeneği ve bilgilendirme bulunur. Açarsanız, yalnız tuzak etkinken fare veya klavye etkinliğinde kameradan fotoğraf alınır. Kamera bekleme sırasında açık tutulmaz. Mikrofon kullanılmaz, video kaydedilmez. Kamera tercihi sonraki çalıştırmalar için bu cihazda saklanır; Ayarlar'dan kapatabilirsiniz. Windows kamera izinleri aşılmaz. Kamera hatasında fotoğraf özelliği kapatılır ve sistem tepsisinde bilgi verilir; kamera için tekrar denemek ayarlardan seçimi yeniden açmayı gerektirir.
+
+Veriler
+Uygulama tuzak ve kısayol kontrolü için giriş olaylarını işler. Yazılan metin, tuş geçmişi, fare koordinatı, tarama geçmişi, ekran görüntüsü veya ses kaydı saklamaz. Etkinlik fotoğrafları ve seçilen tuzak fotoğrafının yerel kopyası saklanır. Fotoğrafların dosya adlarında çekim zamanı bulunur. Kısayol, kamera, başlangıç ve saklama tercihleri yerel ayar dosyasındadır.
+
+Saklama ve güvenlik
+Etkinlik fotoğrafları Windows Data Protection API ile Windows hesabınıza bağlı şifrelenir. Aynı hesabın yetkisiyle çalışan diğer yazılımlar bu korumaya erişebilir; bu mekanizma cihaz ele geçirilmesine karşı mutlak koruma sağlamaz. Önizlemeler bellekte açılır. Kullanıcının seçtiği tuzak fotoğrafı ve ayar dosyası ayrıca şifrelenmez. Store sürümünde uygulama verileri paketinizin LocalState alanındadır; taşınabilir sürümde %LOCALAPPDATA%\Spiderpot altındadır.
+
+Varsayılan saklama 7 gündür, 1–30 gün arasında seçilebilir. Süresi dolan şifreli fotoğraflar uygulama açılışında ve çalışırken her dakika temizlenir. Uygulama kapalıyken otomatik silme çalışmaz. Fotoğraflar bölümünden tek tek veya topluca silebilirsiniz. Dışa aktardığınız JPEG şifrelenmez ve otomatik temizliğe dahil değildir. Daha önce alınmış kopyalar ve Windows yedekleri ayrıca yönetilir.
+
+Paylaşım
+Spiderpot uygulaması ağ bağlantısı kurmaz; fotoğrafları geliştiriciye veya üçüncü kişilere göndermez. Reklam, analitik, izleme, hesap oluşturma veya bulut depolama içermez. Destek bağlantısını tarayıcıda açmanız halinde GitHub'ın kendi politikaları geçerlidir. Microsoft Store'un indirme, güncelleme ve mağaza verileri Microsoft'un kendi politikalarına tabidir.
+
+Kontroller ve sorumluluk
+Kamerayı Ayarlar'dan kapatabilir; fotoğrafları görüntüleyebilir, dışa aktarabilir ve silebilirsiniz. Otomatik başlatma isteğe bağlıdır. Uygulama yönetici izni istemez ve USB/aygıt politikalarını değiştirmez. Kaldırma Windows Ayarlar üzerinden yapılır. Taşınabilir dosyayı silmek tek başına yerel fotoğrafları silmez; önce Fotoğraflar bölümünden temizleyin.
+
+Yalnız yetkili olduğunuz cihazlarda kullanın. Kayda girecek kişilere bilgi verme ve gerekli izinleri alma sorumluluğu kullanıcıdadır. Uygulama çocuklara yönelik tasarlanmamıştır. Politika, veri davranışı değişirse güncellenir.

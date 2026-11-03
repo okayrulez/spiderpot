@@ -5,130 +5,141 @@ import subprocess
 import threading
 import sys
 import shutil
+from spiderpot_support import (CAMERA_NOTICE, load_config, save_config, resource,
+                               set_startup, launch, show_privacy, circular_icon)
 
 class SpiderpotBuilderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Spiderpot Setup Wizard")
-        from PIL import Image, ImageTk
-        self.root.geometry("750x550")
-        self.root.resizable(False, False)
-        
-        try:
-            style = ttk.Style()
-            style.theme_use('vista')
-        except: pass
-
-        desktop_path = self.get_desktop_path()
-        self.build_dir = os.path.dirname(os.path.abspath(__file__))
+        self.root.title("Spiderpot Kurulum Sihirbazı")
+        self.build_dir = str(resource(''))
         self.core_script = os.path.join(self.build_dir, "Assets", "Spiderpot_Core.py")
-        self.selected_wallpaper = os.path.join(self.build_dir, "Assets", "spider_noir.jpg")
+        self.config = load_config()
+        selected = self.config['wallpaper']
+        self.selected_wallpaper = selected if selected and os.path.isfile(selected) else str(resource('Assets/spiderpot-wallpaper.jpg'))
 
-        main_frame = tk.Frame(root, bg="white")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Left panel for image
-        left_frame = tk.Frame(main_frame, bg="black", width=250)
-        left_frame.pack(side=tk.LEFT, fill=tk.Y)
-        left_frame.pack_propagate(False)
-
-        # Load and crop image
+        # Use Windows' native themed controls and scale pixel dimensions with text.
+        self.ui_scale = max(1.0, float(root.tk.call("tk", "scaling")) / (96 / 72))
+        px = lambda value: round(value * self.ui_scale)
+        self.root.geometry(f"{px(900)}x{px(735)}")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#f3f3f3")
         try:
-            img_path = r"C:\Users\oktay.dedeoglu\Downloads\spider-noir-2026-5120x2880-24881.jpg"
-            img = Image.open(img_path)
-            target_width, target_height = 250, 550
-            img_ratio = img.width / img.height
-            target_ratio = target_width / target_height
-            
-            if img_ratio > target_ratio:
-                new_w = int(img.height * target_ratio)
-                offset = (img.width - new_w) // 2
-                img = img.crop((offset, 0, offset + new_w, img.height))
-            else:
-                new_h = int(img.width / target_ratio)
-                offset = (img.height - new_h) // 2
-                img = img.crop((0, offset, img.width, offset + new_h))
-                
-            img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
-            self.wizard_photo = ImageTk.PhotoImage(img)
-            tk.Label(left_frame, image=self.wizard_photo, bg="black").pack(fill=tk.BOTH, expand=True)
-        except Exception:
-            tk.Label(left_frame, text="Spiderpot", fg="red", bg="black", font=("Segoe UI", 24, "bold")).pack(expand=True)
-
-        # Right panel for settings
-        right_frame = tk.Frame(main_frame, bg="white")
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        tk.Label(right_frame, text="Spiderpot Kurulum Sihirbazı", font=("Segoe UI", 16, "bold"), bg="white", fg="red").pack(pady=15)
-        
-        # --- Settings Frame ---
-        settings_frame = tk.Frame(right_frame, bg="white")
-        settings_frame.pack(fill=tk.X, padx=20, pady=5)
-        
-        # 1. Wallpaper Selection
-        wp_frame = tk.Frame(settings_frame, bg="white")
-        wp_frame.pack(fill=tk.X, pady=5)
-        tk.Label(wp_frame, text="Tuzak Wallpaper Seç:", font=("Segoe UI", 10, "bold"), bg="white").pack(side=tk.LEFT)
-        self.lbl_wp = tk.Label(wp_frame, text="spiderman3.jpg", font=("Segoe UI", 9), bg="white", fg="blue", width=25, anchor="e")
-        self.lbl_wp.pack(side=tk.LEFT, padx=5)
-        tk.Button(wp_frame, text="Gözat", command=self.browse_wallpaper, height=1, relief="groove").pack(side=tk.RIGHT)
-        
-        ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
-
-        # 2. Key Settings
-        tk.Label(settings_frame, text="Kısayol Ayarları (Tümü Ctrl ile çalışır)", font=("Segoe UI", 11, "bold"), bg="white").pack(anchor="w", pady=5)
-
-        # Trap 1
-        k1_frame = tk.Frame(settings_frame, bg="white")
-        k1_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k1_frame, text="Tuzak 1 (Wallpaper) Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k1_entry = ttk.Entry(k1_frame, width=5)
-        self.k1_entry.insert(0, "1")
-        self.k1_entry.pack(side=tk.RIGHT)
-
-        # Trap 2
-        k2_frame = tk.Frame(settings_frame, bg="white")
-        k2_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k2_frame, text="Tuzak 2 (Siyah Ekran) Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k2_entry = ttk.Entry(k2_frame, width=5)
-        self.k2_entry.insert(0, "2")
-        self.k2_entry.pack(side=tk.RIGHT)
-
-        # Lock
-        k3_frame = tk.Frame(settings_frame, bg="white")
-        k3_frame.pack(fill=tk.X, pady=2)
-        tk.Label(k3_frame, text="Anında Kilitleme Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.k3_entry = ttk.Entry(k3_frame, width=5)
-        self.k3_entry.insert(0, "3")
-        self.k3_entry.pack(side=tk.RIGHT)
-
-        # Exit
-        ke_frame = tk.Frame(settings_frame, bg="white")
-        ke_frame.pack(fill=tk.X, pady=2)
-        tk.Label(ke_frame, text="Tuzağı Kapatma Tuşu:", font=("Segoe UI", 10), bg="white").pack(side=tk.LEFT)
-        self.ke_combo = ttk.Combobox(ke_frame, values=["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "esc", "end"], state="readonly", width=5)
-        self.ke_combo.set("f12")
-        self.ke_combo.pack(side=tk.RIGHT)
-
-        ttk.Separator(settings_frame, orient='horizontal').pack(fill='x', pady=10)
-
-        self.auto_start_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(settings_frame, text="Windows açılışında arka planda gizlice otomatik başlat", variable=self.auto_start_var, bg="white", font=("Segoe UI", 10)).pack(anchor="w", pady=5)
-
-        self.add_icon_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(settings_frame, text="Masaüstü simgesi (Icon) oluşturulsun mu?", variable=self.add_icon_var, bg="white", font=("Segoe UI", 10)).pack(anchor="w", pady=5)
-
-        # --- Build Button & Status ---
-        self.status_label = tk.Label(right_frame, text="", fg="blue", bg="white")
-        self.status_label.pack(pady=5)
-
-        self.btn_build = ttk.Button(right_frame, text="Kurulumu Başlat", command=self.start_build, style="Accent.TButton")
-        self.btn_build.pack(pady=15)
-
-        # Style configurations
+            root.iconbitmap(str(resource('Assets/spiderpot.ico')))
+        except tk.TclError:
+            pass
+        style = ttk.Style(root)
         try:
-            style.configure("Accent.TButton", font=("Segoe UI", 12, "bold"))
-        except: pass
+            style.theme_use("vista")
+        except tk.TclError:
+            pass
+        root.option_add("*Font", ("Segoe UI", 10))
+        style.configure("Setup.TFrame", background="#f3f3f3")
+        style.configure("Setup.TLabel", background="#f3f3f3", foreground="#202020")
+        style.configure("Muted.Setup.TLabel", background="#f3f3f3", foreground="#626262", font=("Segoe UI", 9))
+        style.configure("Setup.TLabelframe", background="#f3f3f3")
+        style.configure("Setup.TLabelframe.Label", background="#f3f3f3", foreground="#202020", font=("Segoe UI", 10, "bold"))
+        style.configure("Setup.TCheckbutton", background="#f3f3f3", font=("Segoe UI", 10))
+        style.configure("Setup.TButton", padding=(px(10), px(5)))
+
+        header = tk.Frame(root, bg="white", padx=px(24), pady=px(17))
+        header.pack(fill="x")
+        from PIL import ImageTk
+        self.brand_logo = ImageTk.PhotoImage(circular_icon(px(44)))
+        tk.Label(header, image=self.brand_logo, bg='white').pack(side='right', padx=(px(12), 0))
+        tk.Label(header, text="Spiderpot Kurulumu", bg="white", fg="#202020",
+                 font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        tk.Label(header, text="Fotoğrafınızı ve kısayollarınızı seçin, ardından Spiderpot'u başlatın.",
+                 bg="white", fg="#626262", font=("Segoe UI", 10)).pack(anchor="w", pady=(px(4), 0))
+        ttk.Separator(root).pack(fill="x")
+
+        # A conventional Windows wizard button bar, kept separate from settings.
+        footer = ttk.Frame(root, style="Setup.TFrame", padding=(px(20), px(13)))
+        footer.pack(side="bottom", fill="x")
+        self.btn_cancel = ttk.Button(footer, text="İptal", command=root.destroy, style="Setup.TButton", width=11)
+        self.btn_cancel.pack(side="right")
+        self.btn_build = ttk.Button(footer, text="Kaydet ve Başlat", command=self.start_build,
+                                    style="Setup.TButton", width=19, default="active")
+        self.btn_build.pack(side="right", padx=(0, px(9)))
+        ttk.Button(footer, text="Gizlilik", command=lambda: show_privacy(root), style="Setup.TButton").pack(side="left")
+        ttk.Button(footer, text="Fotoğraflar", command=lambda: launch('--captures'), style="Setup.TButton").pack(side="left", padx=px(7))
+        ttk.Separator(root).pack(side="bottom", fill="x")
+
+        main = ttk.Frame(root, style="Setup.TFrame")
+        main.pack(fill="both", expand=True)
+        left = tk.Frame(main, bg="#10151d", width=px(210))
+        left.pack(side="left", fill="y")
+        left.pack_propagate(False)
+        image_area = tk.Frame(left, bg="#10151d", height=px(280))
+        image_area.pack(fill="x")
+        image_area.pack_propagate(False)
+        self.wallpaper_preview = tk.Label(image_area, bg="#10151d", bd=0)
+        self.wallpaper_preview.pack(fill="both", expand=True)
+        self.update_wallpaper_preview()
+        tk.Label(left, text="SPIDERPOT", bg="#10151d", fg="white",
+                 font=("Segoe UI", 17, "bold")).pack(anchor="w", padx=px(20), pady=(px(20), px(8)))
+        tk.Label(left, text="Sizin fotoğrafınız.\nSizin kısayollarınız.", bg="#10151d", fg="#c3cbd5",
+                 justify="left", font=("Segoe UI", 10)).pack(anchor="w", padx=px(20))
+        tk.Label(left, text="1  Ayarları seçin\n2  Kurulumu başlatın\n3  Kısayollarla kullanın", bg="#10151d", fg="#9daabd",
+                 justify="left", font=("Segoe UI", 9)).pack(anchor="w", padx=px(20), pady=px(22))
+
+        right = ttk.Frame(main, style="Setup.TFrame", padding=(px(26), px(19)))
+        right.pack(side="left", fill="both", expand=True)
+        wallpaper = ttk.LabelFrame(right, text="Tuzak fotoğrafı", style="Setup.TLabelframe", padding=px(12))
+        wallpaper.pack(fill="x", pady=(0, px(14)))
+        ttk.Button(wallpaper, text="Gözat…", command=self.browse_wallpaper, style="Setup.TButton", width=10).pack(side="right")
+        self.lbl_wp = ttk.Label(wallpaper, text=os.path.basename(self.selected_wallpaper), style="Setup.TLabel", anchor="w")
+        self.lbl_wp.pack(side="left", fill="x", expand=True, padx=(0, px(10)))
+
+        shortcuts = ttk.LabelFrame(right, text="Kısayol ayarları", style="Setup.TLabelframe", padding=px(12))
+        shortcuts.pack(fill="x", pady=(0, px(14)))
+        shortcuts.columnconfigure(0, weight=1)
+        for row, (title, attr, value) in enumerate((
+                ("Tuzak 1 · Seçilen fotoğraf", "k1_entry", "1"),
+                ("Tuzak 2 · Siyah ekran", "k2_entry", "2"),
+                ("Tuzak 3 · Mevcut ekran", "k3_entry", "3"))):
+            ttk.Label(shortcuts, text=title, style="Setup.TLabel").grid(row=row, column=0, sticky="w", pady=px(5))
+            ttk.Label(shortcuts, text="Ctrl +", style="Muted.Setup.TLabel").grid(row=row, column=1, padx=(px(16), px(7)))
+            entry = ttk.Entry(shortcuts, width=7, justify="center")
+            entry.insert(0, self.config[{'k1_entry':'key_spider','k2_entry':'key_black','k3_entry':'key_lock'}[attr]])
+            entry.grid(row=row, column=2, sticky="e", pady=px(5))
+            setattr(self, attr, entry)
+        ttk.Separator(shortcuts).grid(row=3, column=0, columnspan=3, sticky="ew", pady=px(7))
+        ttk.Label(shortcuts, text="Tuzağı kapatma tuşu", style="Setup.TLabel").grid(row=4, column=0, sticky="w", pady=px(5))
+        self.ke_combo = ttk.Combobox(shortcuts, values=["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "esc", "end"], state="readonly", width=5, justify="center")
+        self.ke_combo.set(self.config['key_exit'])
+        self.ke_combo.grid(row=4, column=2, sticky="e")
+
+        options = ttk.LabelFrame(right, text="Kurulum seçenekleri", style="Setup.TLabelframe", padding=px(12))
+        options.pack(fill="x")
+        self.auto_start_var = tk.BooleanVar(value=self.config['auto_start'])
+        ttk.Checkbutton(options, text="Windows açıldığında otomatik başlat", variable=self.auto_start_var,
+                        style="Setup.TCheckbutton").pack(anchor="w", pady=(0, px(8)))
+        self.camera_var = tk.BooleanVar(value=self.config['camera_enabled'])
+        ttk.Checkbutton(options, text="Etkinlikte kameradan fotoğraf çek", variable=self.camera_var,
+                        command=self.confirm_camera, style="Setup.TCheckbutton").pack(anchor="w", pady=(0, px(8)))
+        retention_row = ttk.Frame(options, style='Setup.TFrame')
+        retention_row.pack(fill='x')
+        ttk.Label(retention_row, text="Fotoğrafları sakla (gün):", style='Setup.TLabel').pack(side='left')
+        self.retention_var = tk.IntVar(value=self.config['retention_days'])
+        ttk.Spinbox(retention_row, from_=1, to=30, textvariable=self.retention_var, width=5).pack(side='right')
+        ttk.Label(options, text="Kamera varsayılan kapalıdır. Fotoğraflar yerel ve şifrelidir.", style='Muted.Setup.TLabel').pack(anchor='w', pady=(px(8), 0))
+
+        self.status_label = tk.Label(right, text="Hazır. Tüm bileşenler uygulamaya dahildir; indirme yapılmaz.", bg="#f3f3f3", fg="#626262",
+                                     font=("Segoe UI", 9), anchor="w", justify="left", wraplength=px(570))
+        self.status_label.pack(fill="x", pady=(px(13), px(6)))
+
+    def update_wallpaper_preview(self):
+        from PIL import Image, ImageOps, ImageTk
+        try:
+            with Image.open(resource('Assets/spider_noir.jpg')) as source:
+                image = ImageOps.fit(ImageOps.exif_transpose(source).convert("RGB"),
+                                     (round(210 * self.ui_scale), round(280 * self.ui_scale)),
+                                     method=Image.Resampling.LANCZOS)
+            self.wizard_photo = ImageTk.PhotoImage(image)
+            self.wallpaper_preview.configure(image=self.wizard_photo, text="")
+        except (OSError, ValueError):
+            self.wallpaper_preview.configure(image="", text="Spiderpot", fg="white", font=("Segoe UI", 18, "bold"))
 
     def get_desktop_path(self):
         try:
@@ -144,122 +155,45 @@ class SpiderpotBuilderApp:
             self.selected_wallpaper = filepath
             filename = os.path.basename(filepath)
             # Kısalt
-            if len(filename) > 20: filename = filename[:17] + "..."
+            if len(filename) > 38: filename = filename[:35] + "..."
             self.lbl_wp.config(text=filename)
+            self.update_wallpaper_preview()
+
+    def confirm_camera(self):
+        if self.camera_var.get():
+            if not messagebox.askyesno("Spiderpot · Kamera kullanımı", CAMERA_NOTICE, parent=self.root, default="no"):
+                self.camera_var.set(False)
 
     def start_build(self):
-        if not os.path.exists(self.core_script):
-            messagebox.showerror("Hata", f"Kaynak kod bulunamadı!\n{self.core_script}")
-            return
-            
-        if not os.path.exists(self.selected_wallpaper):
-            messagebox.showerror("Hata", f"Seçilen duvar kağıdı bulunamadı!\n{self.selected_wallpaper}")
-            return
-
-        self.btn_build.config(state=tk.DISABLED, text="Derleniyor...")
-        self.status_label.config(text="Gerekli kütüphaneler kuruluyor ve EXE derleniyor...")
-
-        threading.Thread(target=self.build_exe, daemon=True).start()
-
-    def build_exe(self):
         try:
-            # Kill any running old instances and delete from desktop
-            desktop_path = self.get_desktop_path()
-            old_exes = ["Spiderpot.exe", "Spiderpot_Sistem.exe"]
-            for exe_name in old_exes:
-                subprocess.run(f"taskkill /F /IM {exe_name}", shell=True, capture_output=True)
-                old_path = os.path.join(desktop_path, exe_name)
-                if os.path.exists(old_path):
-                    try:
-                        os.remove(old_path)
-                    except:
-                        pass
-            
-            subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller", "opencv-python", "pynput", "pillow", "pystray", "screeninfo"], capture_output=True)
-            
-            with open(self.core_script, "r", encoding="utf-8") as f:
-                code = f.read()
-
-            # Replace keys
-            code = code.replace("self.key_spider = '1'", f"self.key_spider = '{self.k1_entry.get().strip().lower()}'")
-            code = code.replace("self.key_black = '2'", f"self.key_black = '{self.k2_entry.get().strip().lower()}'")
-            code = code.replace("self.key_lock = '3'", f"self.key_lock = '{self.k3_entry.get().strip().lower()}'")
-            code = code.replace("self.key_exit = 'f12'", f"self.key_exit = '{self.ke_combo.get().strip().lower()}'")
-
-            # Rename image references internally to the selected image's name so pyinstaller finds it easily
-            selected_filename = os.path.basename(self.selected_wallpaper)
-            code = code.replace("spiderman3.jpg", selected_filename)
-
-            if self.auto_start_var.get():
-                auto_start_code = """
-try:
-    import sys, os, winreg
-    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
-        winreg.SetValueEx(key, "Spiderpot_App", 0, winreg.REG_SZ, sys.executable)
-except: pass
-"""
-                code = auto_start_code + "\n" + code
-
-            temp_script = os.path.join(self.build_dir, "Temp_Spiderpot.py")
-            with open(temp_script, "w", encoding="utf-8") as f:
-                f.write(code)
-
-            os.chdir(self.build_dir)
-            
-            # Use the perfect transparent icon from Assets folder
-            icon_path = os.path.join(self.build_dir, "Assets", "spider_noir_icon.ico")
-            
-            # Asset klasörü
-            add_data_arg = f"{self.selected_wallpaper};."
-            
-            cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--noconsole", "--name", "Spiderpot_Sistem"]
-            if self.add_icon_var.get() and os.path.exists(icon_path):
-                cmd.append(f"--icon={icon_path}")
-            cmd.extend(["--add-data", add_data_arg])
-            cmd.append(temp_script)
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode == 0:
-                dist_dir = os.path.join(self.build_dir, "dist")
-                exe_path = os.path.join(dist_dir, "Spiderpot_Sistem.exe")
-                
-                if os.path.exists(exe_path):
-                    desktop_exe = os.path.join(self.get_desktop_path(), "Spiderpot_Sistem.exe")
-                    shutil.copy2(exe_path, desktop_exe)
-                    
-                    # Başlangıç (Startup) klasörüne kısayol ekle
-                    try:
-                        startup_folder = os.path.join(os.getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-                        shortcut_path = os.path.join(startup_folder, "Spiderpot.lnk")
-                        ps_script = f"$s=(New-Object -COM WScript.Shell).CreateShortcut('{shortcut_path}');$s.TargetPath='{desktop_exe}';$s.WorkingDirectory='{self.get_desktop_path()}';$s.Save()"
-                        subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    except:
-                        pass
-                    
-                    self.root.after(0, self.finish_build, True, desktop_exe)
-                else:
-                    self.root.after(0, self.finish_build, False, "EXE bulunamadı.")
+            config = dict(self.config)
+            config.update(key_spider=self.k1_entry.get().strip().lower(),
+                          key_black=self.k2_entry.get().strip().lower(),
+                          key_lock=self.k3_entry.get().strip().lower(),
+                          key_exit=self.ke_combo.get(),
+                          camera_enabled=self.camera_var.get(),
+                          auto_start=self.auto_start_var.get(),
+                          retention_days=self.retention_var.get())
+            from spiderpot_support import validate
+            validate(config)
+            if not os.path.isfile(self.selected_wallpaper):
+                raise ValueError("Seçilen fotoğraf bulunamadı. Yeniden seçin.")
+            startup_changed = config['auto_start'] != self.config['auto_start']
+            self.config = save_config(config, self.selected_wallpaper)
+            from spiderpot_support import package_family
+            if getattr(sys,'frozen',False) and not package_family():
+                from pathlib import Path
+                from spiderpot_upgrade import install_bundle
+                executable = install_bundle(Path(sys.executable).parent,config['auto_start'])
+                subprocess.Popen([str(executable),'--run'],creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                self.root.after(0, self.finish_build, False, result.stderr)
-                
-            try: os.remove(temp_script)
-            except: pass
-            
-        except Exception as e:
-            self.root.after(0, self.finish_build, False, str(e))
-
-    def finish_build(self, success, message):
-        self.btn_build.config(state=tk.NORMAL, text="Kurulumu Başlat")
-        if success:
-            self.status_label.config(text="Tamamlandı!", fg="green")
-            messagebox.showinfo("Başarılı", f"Spiderpot başarıyla derlendi!\nEXE Dosyası Masaüstüne kaydedildi.\n\nEğer otomatik başlatmayı seçtiyseniz bilgisayar açıldığında kendiliğinden çalışacaktır.")
-            try: os.startfile(message)
-            except: pass
-        else:
-            self.status_label.config(text="Derleme hatası!", fg="red")
-            messagebox.showerror("Hata", f"Hata detayı:\n{message}")
+                if startup_changed:
+                    set_startup(config['auto_start'])
+                launch('--run')
+            self.root.destroy()
+        except Exception as error:
+            self.status_label.config(text="Ayarlar uygulanamadı.", fg="#a4262c")
+            messagebox.showerror("Spiderpot", str(error), parent=self.root)
 
 if __name__ == "__main__":
     root = tk.Tk()

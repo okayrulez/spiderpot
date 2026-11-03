@@ -1,0 +1,11 @@
+Pillow==13.0.0
+numpy==2.5.4
+opencv-python-headless==4.14.0.94
+pynput==1.8.2
+pystray==0.19.5
+screeninfo==0.8.1
+six==1.17.0
+psutil==7.2.2
+winrt-runtime==3.2.1
+winrt-Windows.Foundation==3.2.1
+winrt-Windows.ApplicationModel==3.2.1

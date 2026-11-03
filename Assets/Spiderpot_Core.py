@@ -9,6 +9,7 @@ import winreg
 import tkinter as tk
 import threading
 from PIL import Image, ImageTk
+from spiderpot_support import CaptureStore, circular_icon, launch, load_config, resource
 
 ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
@@ -38,34 +39,6 @@ def set_dpi_awareness():
     except Exception:
         pass
 
-def set_antigravity_mode(active=True):
-    try:
-        # Check if admin first, otherwise skip to prevent errors/crashes
-        if not ctypes.windll.shell32.IsUserAnAdmin():
-            print("[!] Yönetici izni yok, AntiGravity modu (USB Engelleyici) atlandı.")
-            return
-            
-        if active:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USBSTOR", 0, winreg.KEY_SET_VALUE) as key:
-                winreg.SetValueEx(key, "Start", 0, winreg.REG_DWORD, 4)
-            try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions", 0, winreg.KEY_SET_VALUE)
-            except FileNotFoundError:
-                key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions")
-            winreg.SetValueEx(key, "DenyUnspecified", 0, winreg.REG_DWORD, 1)
-            winreg.CloseKey(key)
-        else:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\USBSTOR", 0, winreg.KEY_SET_VALUE) as key:
-                winreg.SetValueEx(key, "Start", 0, winreg.REG_DWORD, 3)
-            try:
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions", 0, winreg.KEY_SET_VALUE)
-            except FileNotFoundError:
-                key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions")
-            winreg.SetValueEx(key, "DenyUnspecified", 0, winreg.REG_DWORD, 0)
-            winreg.CloseKey(key)
-    except Exception as e:
-        print(f"[!] AntiGravity Hatası: {e}")
-
 def get_desktop_path():
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders")
@@ -93,7 +66,8 @@ class SpiderpotViewer:
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             
-        self.image_path = os.path.join(base_dir, "spiderman3.jpg")
+        configured = load_config()["wallpaper"]
+        self.image_path = configured if configured and os.path.isfile(configured) else str(resource("Assets/spiderpot-wallpaper.jpg"))
         self._last_signature = None
         self.rebuild()
 
@@ -145,7 +119,7 @@ class SpiderpotViewer:
             # monitorlu kurulumda her pencere kendi monitorune kesin oturur (-fullscreen
             # ikincil ekranlarda primary'ye kayabiliyor ve resim boyutuyla uyusmuyor).
             win.overrideredirect(True)
-            win.geometry(f"{mon.width}x{mon.height}+{mon.x}+{mon.y}")
+            win.geometry(f"{mon.width}x{mon.height}{mon.x:+d}{mon.y:+d}")
             win.attributes("-topmost", True)
             win.configure(bg='black')
             
@@ -208,7 +182,7 @@ from pystray import MenuItem as TrayItem
 from PIL import ImageDraw
 
 class SpiderpotApp:
-    def __init__(self, root):
+    def __init__(self, root, config=None):
         self.root = root
         self.root.withdraw()
         
@@ -220,12 +194,17 @@ class SpiderpotApp:
         self.cooldown_seconds = 1
         self.camera_port = 0
         self.capture_lock = threading.Lock()
+        self.session_lock = threading.RLock()
+        self.config = config or load_config()
+        self.camera_enabled = self.config['camera_enabled']
+        self.camera_port = self.config['camera_index']
+        self.session_generation = 0
+        self.capture_thread = None
+        self.closed = False
         
-        desktop_path = get_desktop_path()
-        self.save_folder = os.path.join(desktop_path, "Spiderpot_Yakalananlar")
-        if not os.path.exists(self.save_folder):
-            try: os.makedirs(self.save_folder)
-            except: pass
+        self.capture_store = CaptureStore()
+        self.capture_store.prune(self.config['retention_days'])
+        self.root.after(60000, self._prune)
 
         self.viewer = SpiderpotViewer(self.root)
         
@@ -237,6 +216,8 @@ class SpiderpotApp:
         self.key_lock = '3'
         # To handle both local and built versions
         self.key_exit = 'f12'
+        for name in ('key_spider', 'key_black', 'key_lock', 'key_exit'):
+            setattr(self, name, self.config[name])
         
         # Kullanıcının seçtiği tuşları çalışma anında çözümle (vk + özel tuş nesnesi)
         self._resolve_hotkeys()
@@ -250,19 +231,18 @@ class SpiderpotApp:
         self.input_listener = keyboard.Listener(on_press=self.on_global_press)
         self.input_listener.start()
         
-        # Pre-initialize camera silently in background on startup to be extremely fast later
-        threading.Thread(target=self._init_camera, daemon=True).start()
-        
-        # Bilgisayarı açık tutma protokolü
-        prevent_sleep()
+        # Camera remains closed until an explicitly enabled trap receives input.
 
     def _init_camera(self):
+        pass  # Compatibility with older builders; no eager camera access.
+
+    def _prune(self):
+        if self.closed:
+            return
         try:
-            if self.cap is None or not self.cap.isOpened():
-                temp_cap = cv2.VideoCapture(self.camera_port)
-                with self.capture_lock:
-                    self.cap = temp_cap
-        except: pass
+            self.capture_store.prune(self.config['retention_days'])
+        finally:
+            self.root.after(60000, self._prune)
 
     def _resolve_hotkeys(self):
         # Mod tuşlarını sanal tuş koduna (vk) çevir. vk; klavye düzeninden ve Ctrl'nin
@@ -313,50 +293,84 @@ class SpiderpotApp:
         return None
 
     def setup_tray(self):
-        def create_icon_image(color):
-            image = Image.new('RGB', (64, 64), color)
-            draw = ImageDraw.Draw(image)
-            draw.rectangle((16, 16, 48, 48), fill="white")
-            draw.ellipse((24, 24, 40, 40), fill=color)
-            return image
-
         def on_exit(icon, item):
             self.root.after(0, self.real_quit)
-
+        def settings(icon, item):
+            self.root.after(0, self.open_settings)
+        def captures(icon, item):
+            self.root.after(0, lambda: launch('--captures'))
+        def stop(icon, item):
+            self.root.after(0, self.stop_system)
         menu = pystray.Menu(
+            TrayItem("Ayarlar", settings, default=True),
+            TrayItem("Fotoğraflar", captures),
+            TrayItem("Tuzağı durdur", stop),
             TrayItem("Sistemi Tamamen Kapat", on_exit)
         )
-        self.tray_icon = pystray.Icon("Spiderpot", create_icon_image("red"), "Spiderpot (Pasif)", menu=menu)
+        self.tray_icon = pystray.Icon("Spiderpot", circular_icon(), "Spiderpot (Pasif)", menu=menu)
         self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
         self.tray_thread.start()
 
     def update_tray_icon(self):
         if hasattr(self, 'tray_icon') and self.tray_icon:
-            color = "green" if self.is_active else "red"
             status = "Aktif" if self.is_active else "Pasif"
-            def create_icon_image(c):
-                img = Image.new('RGB', (64, 64), c)
-                dr = ImageDraw.Draw(img)
-                dr.rectangle((16, 16, 48, 48), fill="white")
-                dr.ellipse((24, 24, 40, 40), fill=c)
-                return img
-            self.tray_icon.icon = create_icon_image(color)
-            self.tray_icon.title = f"Spiderpot ({status})"
+            self.tray_icon.icon = circular_icon(active=self.is_active)
+            self.tray_icon.title = f"Spiderpot ({status}) · Kamera {'açık' if self.camera_enabled else 'kapalı'}"
+
+    def open_settings(self):
+        self.stop_system()
+        launch('--configure')
+        self.real_quit()
 
     def capture_photo(self):
-        with self.capture_lock:
-            current_time = time.time()
-            if current_time - self.last_capture_time < self.cooldown_seconds:
-                return
+        if not self.is_active or not self.camera_enabled or self.closed:
+            return
+        if not self.capture_lock.acquire(blocking=False):
+            return
+        if time.monotonic() - self.last_capture_time < self.cooldown_seconds:
+            self.capture_lock.release()
+            return
+        generation = self.session_generation
+        self.last_capture_time = time.monotonic()
+        self.capture_thread = threading.Thread(target=self._capture, args=(generation,), daemon=True)
+        self.capture_thread.start()
 
-            if self.cap is not None and self.cap.isOpened():
-                ret, frame = self.cap.read()
-                if ret:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"yakalandin_{timestamp}.jpg"
-                    filepath = os.path.join(self.save_folder, filename)
-                    cv2.imwrite(filepath, frame)
-                    self.last_capture_time = current_time
+    def _capture(self, generation):
+        camera = None
+        try:
+            if not self.is_active or generation != self.session_generation:
+                return
+            camera = cv2.VideoCapture(self.camera_port, cv2.CAP_DSHOW)
+            if not camera.isOpened():
+                raise RuntimeError('Kamera açılamadı. Windows kamera izinlerini kontrol edin.')
+            for _ in range(4):
+                if not self.is_active or self.closed or generation != self.session_generation:
+                    return
+                ret, frame = camera.read()
+                if not ret:
+                    raise RuntimeError('Kameradan görüntü alınamadı.')
+            ret, jpeg = cv2.imencode('.jpg', frame)
+            if not ret:
+                raise RuntimeError('Fotoğraf hazırlanamadı.')
+            # Session lock also guards cancellation before persistence.
+            with self.session_lock:
+                if self.is_active and not self.closed and generation == self.session_generation:
+                    self.capture_store.save(jpeg.tobytes())
+        except Exception as error:
+            self.camera_enabled = False
+            if not self.closed:
+                self.root.after(0, lambda text=str(error): self._camera_error(text))
+        finally:
+            if camera is not None:
+                camera.release()
+            self.capture_lock.release()
+
+    def _camera_error(self, text):
+        self.update_tray_icon()
+        try:
+            self.tray_icon.notify(text + ' Fotoğraf çekimi kapatıldı; tuzak çalışmaya devam ediyor.', 'Spiderpot')
+        except Exception:
+            pass
 
     def on_move(self, x, y):
         if self.is_active: self.capture_photo()
@@ -391,16 +405,11 @@ class SpiderpotApp:
 
     def start_system(self, mode):
         if not self.is_active:
-            # We already load camera asynchronously, so we don't block here.
-            # Just fallback to starting thread if not opened yet.
-            if self.cap is None or not self.cap.isOpened():
-                threading.Thread(target=self._init_camera, daemon=True).start()
-                
             self.mouse_listener = mouse.Listener(on_move=self.on_move, on_click=self.on_click, on_scroll=self.on_scroll, suppress=True)
             self.mouse_listener.start()
-            
-            # Start antigravity asynchronously so registry logic doesn't block the screen popup
-            threading.Thread(target=set_antigravity_mode, args=(True,), daemon=True).start()
+            prevent_sleep()
+            with self.session_lock:
+                self.session_generation += 1
 
         self.is_active = True
         self.active_mode = mode
@@ -412,13 +421,14 @@ class SpiderpotApp:
 
     def stop_system(self):
         if not self.is_active: return
-        self.is_active = False
+        with self.session_lock:
+            self.is_active = False
+            self.session_generation += 1
         self.active_mode = None
         self.update_tray_icon()
         self.viewer.hide()
         
-        # Asenkron kapat ki anında tepki versin
-        threading.Thread(target=set_antigravity_mode, args=(False,), daemon=True).start()
+        allow_sleep()
 
         if self.mouse_listener:
             try: self.mouse_listener.stop()
@@ -439,6 +449,7 @@ class SpiderpotApp:
     def real_quit(self):
         allow_sleep()
         self.stop_system()
+        self.closed = True
         if self.input_listener:
             try: self.input_listener.stop()
             except: pass
@@ -448,6 +459,7 @@ class SpiderpotApp:
             self.cap.release()
             self.cap = None
             
+        self.tray_icon.stop()
         self.root.destroy()
         sys.exit()
 

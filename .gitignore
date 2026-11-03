@@ -3,3 +3,9 @@ dist/
 *.spec
 __pycache__/
 *.pyc
+release/
+packaging/stage/
+packaging/store-identity.local.json
+*.pfx
+*.msix
+.venv/
