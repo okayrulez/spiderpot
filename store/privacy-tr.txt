@@ -1,14 +1,14 @@
 Spiderpot Gizlilik Politikası
-Sürüm 1.0.0 · 3 Kasım 2026
+Sürüm 1.0.8
 
 Geliştirici: Okay Dedeoğlu
 Destek ve gizlilik talepleri: https://github.com/okayrulez/spiderpot/issues
 Kamuya açık destek kaydına fotoğraf veya başka kişisel veri eklemeyin.
 
-Spiderpot, kullanıcı tarafından başlatılan masaüstü tuzaklarını çalıştırır. Ctrl+1 seçilen fotoğrafı açar, Ctrl+2 siyah ekran açar ve Ctrl+3 mevcut masaüstü görünümünü değiştirmeden tuzağı etkinleştirir. Çıkış tuşu varsayılan olarak F12'dir. Tuzağı durdurmak kamerayı ve fare engellemesini kapatır. Windows oturum kilidinin yerine geçmez.
+Spiderpot, kullanıcı tarafından başlatılan masaüstü görünüm modlarını çalıştırır. Varsayılan Ctrl+1 seçilen görselleri açar, Ctrl+2 siyah ekran açar ve Ctrl+3 mevcut masaüstü görünümünü korur. Kısayollar değiştirilebilir. Modu durdurmak kamerayı, fare ve klavye kısıtlamasını kapatır. Windows'un güvenli kısayolları kullanılabilir.
 
 Kamera kullanımı
-Kamera varsayılan kapalıdır. İlk yapılandırmada ayrı kamera seçeneği ve bilgilendirme bulunur. Açarsanız, yalnız tuzak etkinken fare veya klavye etkinliğinde kameradan fotoğraf alınır. Kamera bekleme sırasında açık tutulmaz. Mikrofon kullanılmaz, video kaydedilmez. Kamera tercihi sonraki çalıştırmalar için bu cihazda saklanır; Ayarlar'dan kapatabilirsiniz. Windows kamera izinleri aşılmaz. Kamera hatasında fotoğraf özelliği kapatılır ve sistem tepsisinde bilgi verilir; kamera için tekrar denemek ayarlardan seçimi yeniden açmayı gerektirir.
+İlk kurulumda kamera seçeneği işaretli gelir. Fotoğraf çekimi, ayarları kaydederken kamera kullanımını onayladığınızda açılır. Açarsanız, yalnız mod etkinken fare veya klavye etkinliğinde kameradan fotoğraf alınır. Üç modda da çekilen fotoğraf etkin ekranlarda 3 saniye gösterilir. Kamera bekleme sırasında açık tutulmaz. Ayarlar'da kamera taraması veya önizlemesi başlatıldığında kamera kısa süre açılır. Bu kontroller sırasında fotoğraf kaydedilmez. Mikrofon kullanılmaz, video kaydedilmez. Kamera tercihi sonraki çalıştırmalar için bu cihazda saklanır; Ayarlar'dan kapatabilirsiniz. Windows kamera izinleri aşılmaz. Kamera hatasında sistem tepsisinde bilgi verilir. Mod yeniden başlatıldığında kamera tekrar denenebilir.
 
 Veriler
 Uygulama tuzak ve kısayol kontrolü için giriş olaylarını işler. Yazılan metin, tuş geçmişi, fare koordinatı, tarama geçmişi, ekran görüntüsü veya ses kaydı saklamaz. Etkinlik fotoğrafları ve seçilen tuzak fotoğrafının yerel kopyası saklanır. Fotoğrafların dosya adlarında çekim zamanı bulunur. Kısayol, kamera, başlangıç ve saklama tercihleri yerel ayar dosyasındadır.
@@ -19,9 +19,11 @@ Etkinlik fotoğrafları Windows Data Protection API ile Windows hesabınıza ba�
 Varsayılan saklama 7 gündür, 1–30 gün arasında seçilebilir. Süresi dolan şifreli fotoğraflar uygulama açılışında ve çalışırken her dakika temizlenir. Uygulama kapalıyken otomatik silme çalışmaz. Fotoğraflar bölümünden tek tek veya topluca silebilirsiniz. Dışa aktardığınız JPEG şifrelenmez ve otomatik temizliğe dahil değildir. Daha önce alınmış kopyalar ve Windows yedekleri ayrıca yönetilir.
 
 Paylaşım
-Spiderpot uygulaması ağ bağlantısı kurmaz; fotoğrafları geliştiriciye veya üçüncü kişilere göndermez. Reklam, analitik, izleme, hesap oluşturma veya bulut depolama içermez. Destek bağlantısını tarayıcıda açmanız halinde GitHub'ın kendi politikaları geçerlidir. Microsoft Store'un indirme, güncelleme ve mağaza verileri Microsoft'un kendi politikalarına tabidir.
+Fotoğraflar cihazda kalır. E-posta bildirimleri isteğe bağlıdır. Kod istediğinizde girdiğiniz adres, doğrulama iletisini göndermek için Spiderpot sunucusuna ve e-posta sağlayıcısına iletilir. Adresi doğrulayıp ayarları kaydederseniz, etkin modda ilk fare veya klavye hareketinde sunucuya bildirim isteği iletilir. E-posta, etkinlik hakkında kısa bir metin içerir. Adres ve alıcı belirteci cihazda Windows hesabınıza bağlı olarak şifrelenir. Sunucu adresi ve en son gönderim zamanını bildirimleri iletmek ve tekrarları sınırlandırmak için tutar. Alıcı yetkisi 90 günlük hareketsizlikte sona erer. Ayarlar'da bildirimleri kapatıp kaydedebilirsiniz. Sunucudaki adres kaydınızla ilgili istekler için destek bağlantısını kullanabilirsiniz.
+
+Destek bağlantısını tarayıcıda açmanız halinde GitHub'ın kendi politikaları geçerlidir. Microsoft Store'un indirme, güncelleme ve mağaza verileri Microsoft'un kendi politikalarına tabidir.
 
 Kontroller ve sorumluluk
-Kamerayı Ayarlar'dan kapatabilir; fotoğrafları görüntüleyebilir, dışa aktarabilir ve silebilirsiniz. Otomatik başlatma isteğe bağlıdır. Uygulama yönetici izni istemez ve USB/aygıt politikalarını değiştirmez. Kaldırma Windows Ayarlar üzerinden yapılır. Taşınabilir dosyayı silmek tek başına yerel fotoğrafları silmez; önce Fotoğraflar bölümünden temizleyin.
+Kamerayı Ayarlar'dan kapatabilir; fotoğrafları görüntüleyebilir, dışa aktarabilir ve silebilirsiniz. Kullanımı gör tanıtımında yalnız ayrı onay verirseniz bir test karesi çekilir. Bu kare diğer fotoğraflar gibi şifreli saklanır, ekranlarda 3 saniye gösterilir ve normal kamera tercihinizi değiştirmez. Fotoğraflar ekranından şifreli kayıt klasörünü açabilirsiniz. Otomatik başlatma isteğe bağlıdır. Uygulama yönetici izni istemez ve USB/aygıt politikalarını değiştirmez. Kaldırma Windows Ayarlar üzerinden yapılır. Taşınabilir dosyayı silmek tek başına yerel fotoğrafları silmez; önce Fotoğraflar bölümünden temizleyin.
 
 Yalnız yetkili olduğunuz cihazlarda kullanın. Kayda girecek kişilere bilgi verme ve gerekli izinleri alma sorumluluğu kullanıcıdadır. Uygulama çocuklara yönelik tasarlanmamıştır. Politika, veri davranışı değişirse güncellenir.
