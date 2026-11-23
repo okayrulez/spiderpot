@@ -2,17 +2,20 @@
 
 Windows için üç masaüstü tuzağı, özelleştirilebilir kısayollar ve isteğe bağlı yerel kamera fotoğrafları.
 
-## İndir ve kur
+## Windows x64 · 1.0.13 beta
 
-[Spiderpot 1.0.1 Windows x64 kurulumunu indir](https://github.com/okayrulez/spiderpot/releases/download/v1.0.1/Spiderpot-1.0.1-Setup.exe)
+[QR eşleştirmeli Windows kurucusunu indir](https://github.com/okayrulez/spiderpot/releases/download/v1.0.13-beta/Spiderpot-1.0.13-Setup.exe) · [Sürüm notları ve SHA-256](https://github.com/okayrulez/spiderpot/releases/tag/v1.0.13-beta)
 
-1. `Spiderpot-1.0.1-Setup.exe` dosyasını çalıştırın. Python kurulumu veya kurulum sırasında internet bağlantısı gerekmez.
-2. Kurucu, mevcut kullanıcıdaki `Spiderpot_Sistem.exe` ve `Spiderpot.exe` sürümlerini kapatır. Eski `Spiderpot_App` / `Spiderpot` başlangıç kayıtlarını ve eski başlangıç kısayollarını devralır.
-3. Fotoğrafınızı, kısayolları ve kamera tercihinizi seçip **Kaydet ve Başlat** düğmesine basın.
+Kurucuyu çalıştırın. Önceden kurduysanız güncel sürüm aynı Windows kullanıcısının ayarlarını devralır. İlk kurulumda tercihlerinizi seçip **Kaydet ve Devam Et** düğmesine basın.
 
-Uygulama `%LOCALAPPDATA%\Programs\Spiderpot\versions\1.0.1` altına yerleşir. Başlat menüsünde Spiderpot kısayolu oluşturulur. Otomatik başlangıç açıksa yalnız güncel sürüme yönelen tek kayıt tutulur. Eski başlangıç kayıtlarının ve kısayolların yedeği `%LOCALAPPDATA%\Spiderpot\migration-backups` altındadır. Önceden indirilmiş EXE dosyaları, fotoğraflar ve kullanıcı belgeleri silinmez.
+### iPhone ile eşleştirme
 
-[ZIP paketi](https://github.com/okayrulez/spiderpot/releases/download/v1.0.1/Spiderpot-1.0.1-x64-Portable.zip) de kullanılabilir: tamamını çıkarın, `Spiderpot.exe` dosyasını açın. **Kaydet ve Başlat**, aynı güncelleme işlemini yaparak kalıcı konuma kurar; çıkarılan ZIP klasörünü sonradan taşımanız başlangıcı bozmaz.
+1. iPhone’da TestFlight üzerinden Spiderpot’u kurun. İlk deneme için telefonu ve PC’yi aynı yerel ağa bağlayın.
+2. Windows’ta saatin yanındaki gizli simgeleri açın. Spiderpot’un dairesel simgesine sağ tıklayıp **Dashboard aç → Telefon eşleştir** yolunu izleyin.
+3. **Erişimi aç → QR oluştur** düğmelerine basın. iPhone’da **QR kodunu okut** ile iki dakika geçerli kodu tarayın ve **Bağlan**’a dokunun.
+4. Canlı ekranı gördükten sonra fare ve klavye kullanmak isterseniz PC’de ilgili izni açın. Paylaşımı bitirmek için PC’de **Durdur**’a basın.
+
+Ekran ve giriş verileri iki cihaz arasında doğrudan TLS üzerinden taşınır. 5G’den erişim, telefonun bilgisayarın dış adresine ulaşabilmesini gerektirir. Eşleştirme penceresindeki dış IP veya DNS alanı bu amaçla kullanılabilir.
 
 ## Modlar ve simge
 
@@ -31,7 +34,7 @@ Bu uygulama Windows oturum kilidinin yerine geçmez. Ctrl+Alt+Del gibi Windows g
 
 ## Kamera ve veriler
 
-- Kamera varsayılan kapalıdır ve yalnız ayrı bilgilendirmeyi kabul ederek açılır.
+- İlk kurulumda kamera seçeneği işaretli gelir. Fotoğraf çekimi, ayarları kaydederken onay verdiğinizde etkinleşir.
 - Bekleme sırasında kamera açılmaz. Mikrofon ve video kaydı yoktur.
 - Etkinlik fotoğrafları Windows hesabına bağlı DPAPI ile şifrelenir. Uygulama fotoğrafları internete göndermez.
 - Tepsi menüsündeki **Fotoğraflar** bölümünden önizleme, dışa aktarma ve silme yapılır. Dışa aktarılan JPEG şifrelenmez.
@@ -55,7 +58,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe tools\build_release.py
 ```
 
-Çıktılar deponun bir üst dizinindeki `outputs` klasörüne yazılır. Derleme sırasında resmi Microsoft SDK BuildTools NuGet paketi indirilir; kurulan uygulama bağımlılık indirmez. Derleme günlüğü bir üst dizindeki `work/store-build` klasöründedir.
+Çıktılar deponun bir üst dizinindeki `outputs` klasörüne yazılır. Derleme sırasında resmi Microsoft SDK BuildTools NuGet paketi indirilir; kurulan uygulama bağımlılık indirmez. Derleme günlüğü bir üst dizindeki `build` klasöründedir.
 
 MSIX paketinde Store'da ayrılan kimlik ve yayıncı bilgileri kullanılmalıdır. Geliştirme kimliğiyle oluşturulan `Development.msix`, imzasız bir paketleme denemesidir; Microsoft Store'a gönderilmez ve normal kullanıcı kurulumu için önerilmez. EXE ve GitHub sürümü de Microsoft Store sertifikası almış değildir.
 

@@ -16,9 +16,10 @@ import winreg
 import psutil
 
 PRODUCT_ID = 'okayrulez.spiderpot'
-VERSION = '1.0.1'
+VERSION = '1.0.13'
 LEGACY_NAMES = {'spiderpot.exe', 'spiderpot_sistem.exe'}
 RUN_KEY = r'Software\Microsoft\Windows\CurrentVersion\Run'
+UNINSTALL_KEY = r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Spiderpot'
 RUNTIME_MUTEXES = ('Local\\Spiderpot.Runtime.v1', 'Local\\Spiderpot_Mutex_Lock', 'Global\\Spiderpot_Mutex_Lock')
 
 
@@ -178,19 +179,47 @@ def set_startup_target(executable, enabled, arguments=('--startup',)):
             winreg.SetValueEx(key,'Spiderpot',0,winreg.REG_SZ,value)
 
 
-def shortcut(executable):
-    path = Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Spiderpot.lnk'
-    path.parent.mkdir(parents=True,exist_ok=True)
+def start_menu_shortcut():
+    return Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Spiderpot.lnk'
+
+
+def desktop_link():
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as key:
+            desktop = os.path.expandvars(winreg.QueryValueEx(key, 'Desktop')[0])
+    except OSError:
+        desktop = str(Path.home()/'Desktop')
+    return Path(desktop)/'Spiderpot.lnk'
+
+
+def saved_installer(root=None):
+    return Path(root or install_root())/'installer'/VERSION/f'Spiderpot-{VERSION}-Setup.exe'
+
+
+def shortcut(executable, path=None, *, remove=False, root=None):
+    path = start_menu_shortcut() if path is None else path
+    if remove and not path.is_file():
+        return
+    if not remove:
+        path.parent.mkdir(parents=True,exist_ok=True)
     code = '''[Console]::InputEncoding = [Text.Encoding]::UTF8
 $p = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $s = (New-Object -ComObject WScript.Shell).CreateShortcut($p.path)
+if (Test-Path -LiteralPath $p.path) {
+    if (-not $s.TargetPath.StartsWith($p.ownedPrefix, [StringComparison]::OrdinalIgnoreCase)) { exit 0 }
+    if ($p.remove) { Remove-Item -LiteralPath $p.path -ErrorAction Stop; exit 0 }
+}
+if ($p.remove) { exit 0 }
 $s.TargetPath = $p.target
 $s.WorkingDirectory = $p.directory
 $s.IconLocation = $p.target + ',0'
 $s.Save()
 '''
     encoded = base64.b64encode(code.encode('utf-16-le')).decode('ascii')
-    payload = json.dumps({'path':str(path),'target':str(executable),'directory':str(executable.parent)},ensure_ascii=False)
+    payload = json.dumps({
+        'path': str(path), 'target': str(executable), 'directory': str(executable.parent),
+        'ownedPrefix': str(Path(root or install_root()).resolve()) + os.sep, 'remove': remove,
+    }, ensure_ascii=False)
     subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],
                    input=payload.encode('utf-8'),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                    creationflags=subprocess.CREATE_NO_WINDOW,check=True)
@@ -219,18 +248,107 @@ def deploy(source, root=None, version=VERSION):
     return target/'Spiderpot.exe'
 
 
-def install_bundle(source, enabled, root=None):
+def register_uninstaller(root, setup, executable):
+    fields = {
+        'DisplayName': 'Spiderpot', 'Publisher': 'Okay Dedeoglu', 'DisplayVersion': VERSION,
+        'InstallLocation': str(root), 'DisplayIcon': str(executable),
+        'UninstallString': subprocess.list2cmdline([str(setup), '--uninstall']),
+    }
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
+        for field, value in fields.items():
+            winreg.SetValueEx(key, field, 0, winreg.REG_SZ, value)
+        for field in ('NoModify', 'NoRepair'):
+            winreg.SetValueEx(key, field, 0, winreg.REG_DWORD, 1)
+
+
+def install_bundle(source, enabled, root=None, *, desktop_shortcut=False, installer=None):
     root = Path(root) if root is not None else install_root()
+    marker = root/'install.json'
     with Mutex('Local\\Spiderpot.Update.v1',owned=True,wait_ms=10000):
+        if root.is_symlink() or root.is_junction():
+            raise RuntimeError('Güvenli olmayan kurulum yolu.')
+        if root.exists() and any(root.iterdir()):
+            recorded = marker.is_file() and json.loads(marker.read_text(encoding='utf-8')).get('product_id') == PRODUCT_ID
+            legacy = not marker.exists() and (root/'Spiderpot_Sistem.exe').is_file()
+            if not recorded and not legacy:
+                raise RuntimeError('Kurulum klasöründe tanınmayan dosyalar var.')
         previous = legacy_startup()
         stopped = stop_instances()
         executable = deploy(source,root)
         set_startup_target(executable,enabled)
-        shortcut(executable)
+        shortcut(executable, root=root)
+        shortcut(executable, desktop_link(), remove=not desktop_shortcut, root=root)
         record = {'product_id':PRODUCT_ID,'version':VERSION,'executable':str(executable),
                   'updated_at':datetime.now(timezone.utc).isoformat(),'replaced_processes':stopped}
-        (root/'install.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
+        marker.write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
+        setup = saved_installer(root)
+        if installer and Path(installer).resolve() != setup.resolve():
+            setup.parent.mkdir(parents=True, exist_ok=True)
+            staging = setup.with_suffix('.tmp')
+            shutil.copy2(installer, staging)
+            staging.replace(setup)
+        if setup.is_file():
+            register_uninstaller(root, setup, executable)
+        if installer:
+            from spiderpot_cleanup import clean_previous
+            try:
+                record['cleanup'] = clean_previous(root, VERSION,
+                                                   (root, desktop_link().parent, Path.home()/'Downloads'),
+                                                   (installer, executable, setup))
+            except OSError as error:
+                record['cleanup'] = {'error': str(error)}
+            marker.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
         backup = Path(os.environ['LOCALAPPDATA'])/'Spiderpot/migration-backups'
         backup.mkdir(parents=True,exist_ok=True)
         (backup/(datetime.now().strftime('%Y%m%d-%H%M%S')+'-startup.json')).write_text(json.dumps(previous,ensure_ascii=False,indent=2),encoding='utf-8')
         return executable
+
+
+def uninstall_bundle():
+    root = install_root()
+    expected = root.parent.resolve()/'Spiderpot'
+    if root.resolve() != expected or root.is_symlink() or root.is_junction():
+        raise RuntimeError("Güvenli olmayan kurulum yolu.")
+    with Mutex('Local\\Spiderpot.Update.v1', owned=True, wait_ms=10000):
+        record = json.loads((root/'install.json').read_text(encoding='utf-8'))
+        executable = Path(record['executable']).resolve()
+        if (record.get('product_id') != PRODUCT_ID or executable.name != 'Spiderpot.exe'
+                or not executable.is_relative_to(expected/'versions')):
+            raise RuntimeError("Tanınan bir Spiderpot EXE kurulumu bulunamadı.")
+        processes = [process for process in running_instances()
+                     if Path(process.info['exe']).resolve().is_relative_to(expected)]
+        stop_instances(processes)
+        retired = expected.with_name('.spiderpot-uninstall-'+uuid.uuid4().hex)
+        owned = [root/name for name in ('versions', 'installer', 'install.json') if (root/name).exists()]
+        if any(path.is_symlink() or path.is_junction() or path.resolve().parent != expected for path in owned):
+            raise RuntimeError("Kaldırma hedefi doğrulanamadı.")
+        retired.mkdir()
+        moved = []
+        try:
+            for path in owned:
+                for attempt in range(20):
+                    try:
+                        path.replace(retired/path.name)
+                        moved.append(path)
+                        break
+                    except PermissionError:
+                        if attempt == 19:
+                            raise
+                        time.sleep(.25)
+        except OSError:
+            for path in reversed(moved):
+                (retired/path.name).replace(path)
+            retired.rmdir()
+            raise
+        if not any(root.iterdir()):
+            root.rmdir()
+        clear_startup()
+        shortcut(executable, remove=True, root=expected)
+        shortcut(executable, desktop_link(), remove=True, root=expected)
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
+        except FileNotFoundError:
+            pass
+        if retired.resolve().parent != expected.parent or retired.is_junction() or retired.is_symlink():
+            raise RuntimeError("Kaldırma hedefi doğrulanamadı.")
+        shutil.rmtree(retired)

@@ -13,7 +13,7 @@ from xml.sax.saxutils import escape
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT))
 from spiderpot_upgrade import VERSION
-WORK = ROOT.parent / 'work' / 'store-build'
+WORK = ROOT.parent / 'build'
 OUTPUT = ROOT.parent / 'outputs'
 SDK_VERSION = '10.0.28000.2705'
 
@@ -38,7 +38,7 @@ def sdk_tools():
 def licenses(destination):
     destination.mkdir(parents=True,exist_ok=True)
     summaries=[]
-    for name in ('Pillow','numpy','opencv-python-headless','pynput','pystray','screeninfo','six','psutil','winrt-runtime','winrt-Windows.Foundation','winrt-Windows.ApplicationModel','typing_extensions'):
+    for name in ('Pillow','numpy','opencv-python-headless','pynput','pystray','screeninfo','six','psutil','winrt-runtime','winrt-Windows.Foundation','winrt-Windows.ApplicationModel','typing_extensions','cryptography','cffi','pycparser','qrcode','colorama'):
         dist=metadata.distribution(name)
         summaries.append(f'{name} {dist.version}\n{dist.metadata.get("Home-page", "")}\nLicense: {dist.metadata.get("License-Expression",dist.metadata.get("License","See bundled license"))}\n')
         for file in dist.files or []:
@@ -65,7 +65,7 @@ def manifest(identity):
  <Resources><Resource Language="tr-TR"/></Resources>
  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.28000.0"/></Dependencies>
  <Applications><Application Id="Spiderpot" Executable="app\\Spiderpot.exe" EntryPoint="Windows.FullTrustApplication">
-  <uap:VisualElements DisplayName="Spiderpot" Description="Masaüstü tuzakları ve yerel fotoğraf kaydı" BackgroundColor="transparent" Square150x150Logo="images\\Square150x150Logo.png" Square44x44Logo="images\\Square44x44Logo.png"/>
+  <uap:VisualElements DisplayName="Spiderpot" Description="Masaüstü görünüm modları ve isteğe bağlı yerel fotoğraf kaydı" BackgroundColor="transparent" Square150x150Logo="images\\Square150x150Logo.png" Square44x44Logo="images\\Square44x44Logo.png"/>
   <Extensions><desktop:Extension Category="windows.startupTask" Executable="app\\Spiderpot.exe" EntryPoint="Windows.FullTrustApplication"><desktop:StartupTask TaskId="SpiderpotStartup" Enabled="false" DisplayName="Spiderpot"/></desktop:Extension></Extensions>
  </Application></Applications>
  <Capabilities><rescap:Capability Name="runFullTrust"/><DeviceCapability Name="webcam"/></Capabilities>
@@ -75,6 +75,7 @@ def manifest(identity):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--identity', type=Path)
+    parser.add_argument('--mail-url', help='Public HTTPS URL for the optional email service')
     parser.add_argument('--skip-exe',action='store_true')
     args=parser.parse_args()
     OUTPUT.mkdir(parents=True,exist_ok=True)
@@ -90,6 +91,14 @@ def main():
                             ('Assets/spider_noir.jpg','Assets'),
                             ('Assets/spiderpot-wallpaper.jpg','Assets'),('store/privacy-tr.txt','store')]:
             cmd.extend(['--add-data',str(ROOT/source)+';'+dest])
+        if args.mail_url:
+            from spiderpot_mail import MailClient
+            client = MailClient(args.mail_url)
+            if not client.url.startswith('https://'):
+                parser.error('--mail-url must use HTTPS')
+            url_file = WORK / 'mail-url.txt'
+            url_file.write_text(client.url, encoding='utf-8')
+            cmd.extend(['--add-data', str(url_file) + ';store'])
         cmd.append(str(ROOT/'Spiderpot.py'))
         with (WORK/'pyinstaller.log').open('w',encoding='utf-8') as log:
             subprocess.run(cmd,cwd=ROOT,stdout=log,stderr=subprocess.STDOUT,check=True)

@@ -20,6 +20,22 @@ class UpgradeTests(unittest.TestCase):
         (root/'_internal/Assets/spiderpot.ico').write_bytes(b'test icon')
         return root
 
+    def test_cleanup_preserves_current_bundle_and_unrelated_desktop_files(self):
+        from spiderpot_cleanup import clean_previous
+        with tempfile.TemporaryDirectory() as tmp:
+            root, desktop = Path(tmp)/'program', Path(tmp)/'desktop'
+            desktop.mkdir()
+            old = self.bundle(root/'versions'/'1.0.6')
+            self.bundle(root/'versions'/'1.0.10')
+            duplicate = desktop/'Spiderpot_Sistem.exe'
+            duplicate.write_bytes((old/'Spiderpot.exe').read_bytes())
+            (desktop/'Spiderpot-other.exe').write_bytes(b'unrelated')
+            (desktop/'Spiderpot_Yakalananlar').mkdir()
+            with patch('spiderpot_cleanup.recycle') as recycle:
+                report = clean_previous(root, '1.0.10', (desktop,), ())
+            self.assertEqual(set(report['recycled']), {str(old),str(duplicate)})
+            self.assertEqual(recycle.call_count, 2)
+
     def test_both_old_binary_names_are_recognized(self):
         for name in ('Spiderpot.exe','Spiderpot_Sistem.exe'):
             self.assertTrue(upgrade.is_spiderpot_process({'name':name,'exe':str(Path('C:/old')/name)}))
@@ -90,6 +106,33 @@ class UpgradeTests(unittest.TestCase):
         data.seek(0)
         with tempfile.TemporaryDirectory() as scratch,zipfile.ZipFile(data) as archive:
             with self.assertRaises(ValueError): extract_payload(archive,scratch)
+
+    def test_exe_install_can_export_and_uninstall_without_removing_user_files(self):
+        with tempfile.TemporaryDirectory() as scratch, patch.dict(os.environ,LOCALAPPDATA=scratch):
+            base=Path(scratch)
+            source=self.bundle(base/'download')
+            installer=base/'downloaded-setup.exe'
+            installer.write_bytes(b'full offline setup')
+            photos=base/'Spiderpot'/'captures'
+            photos.mkdir(parents=True)
+            photo=photos/'kept.spcap'
+            photo.write_bytes(b'encrypted frame')
+            with patch.object(Path,'home', return_value=base), patch.object(upgrade,'stop_instances',return_value=[]), \
+                    patch.object(upgrade,'set_startup_target'), patch.object(upgrade,'legacy_startup',return_value={}), \
+                    patch.object(upgrade,'running_instances',return_value=[]), patch.object(upgrade,'clear_startup'), \
+                    patch.object(upgrade,'shortcut'), patch.object(upgrade,'desktop_link',return_value=base/'Desktop'/'Spiderpot.lnk'), \
+                    patch.object(upgrade,'register_uninstaller') as register, patch.object(upgrade.winreg,'DeleteKey'):
+                executable=upgrade.install_bundle(source,True,desktop_shortcut=True,installer=installer)
+                cached=upgrade.saved_installer()
+                self.assertEqual(cached.read_bytes(),installer.read_bytes())
+                register.assert_called_once_with(upgrade.install_root(),cached,executable)
+                leftover=upgrade.install_root()/'old-user-file.txt'
+                leftover.write_text('keep me')
+                upgrade.uninstall_bundle()
+            self.assertFalse(executable.exists())
+            self.assertFalse(cached.exists())
+            self.assertEqual(photo.read_bytes(),b'encrypted frame')
+            self.assertEqual(leftover.read_text(),'keep me')
 
     def test_compatibility_mutexes_include_old_and_current_names(self):
         self.assertIn('Global\\Spiderpot_Mutex_Lock',upgrade.RUNTIME_MUTEXES)

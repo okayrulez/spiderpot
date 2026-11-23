@@ -1,8 +1,5 @@
 """Offline, packaged release entry point. Original three trap modes remain in Assets."""
 import argparse
-import ctypes
-from ctypes import wintypes
-import sys
 import tkinter as tk
 from tkinter import messagebox
 from spiderpot_support import config_path, load_config, show_captures
@@ -11,6 +8,9 @@ from spiderpot_support import config_path, load_config, show_captures
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--configure", action="store_true")
+    parser.add_argument("--setup", action="store_true")
+    parser.add_argument("--tutorial", action="store_true")
+    parser.add_argument("--check", action="store_true")
     parser.add_argument("--captures", action="store_true")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--startup", action="store_true")
@@ -24,12 +24,13 @@ def main():
         root.deiconify()
         root.mainloop()
         return
-    if args.configure or not config_path().is_file() or (not args.run and not args.startup):
+    first_setup = not config_path().is_file()
+    if args.setup or args.configure or first_setup or not (args.run or args.startup or args.tutorial or args.check):
         if args.startup:
             root.destroy()  # Startup never prompts before first-run setup.
             return
         from Spiderpot_Kurulum import SpiderpotBuilderApp
-        SpiderpotBuilderApp(root)
+        SpiderpotBuilderApp(root, setup_finish=args.setup or first_setup)
         root.deiconify()
         root.mainloop()
         return
@@ -49,6 +50,10 @@ def main():
             messagebox.showerror("Spiderpot", "Tuzak durduruldu.\n" + str(error), parent=root)
         root.report_callback_exception = callback_error
         root.protocol("WM_DELETE_WINDOW", app.real_quit)
+        if args.tutorial:
+            root.after_idle(app.open_tutorial)
+        elif args.check:
+            root.after_idle(app.open_check)
         root.mainloop()
     finally:
         runtime.close()

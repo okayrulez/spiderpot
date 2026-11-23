@@ -14,14 +14,14 @@ import uuid
 
 from PIL import Image, ImageDraw
 
-VERSION = "1.0.1"
+VERSION = "1.0.13"
 CAMERA_NOTICE = (
     "Kamera seçeneği açıkken, başlattığınız tuzakta fare veya klavye etkinliği olduğunda fotoğraf çekilir. "
-    "Üç modda da kamera kullanılabilir; tuzak ekranına ek bir bildirim bandı eklenmez. Mikrofon ve video kaydı yoktur.\n\n"
+    "Üç modda da çekilen fotoğraf etkin ekranlarda 3 saniye gösterilir. Mikrofon ve video kaydı yoktur.\n\n"
     "Fotoğraflar yalnız bu cihazda Windows hesabınıza bağlı şifrelenerek saklanır ve otomatik gönderilmez. "
     "Fotoğraflar bölümünden görüntüleyebilir, dışa aktarabilir veya silebilirsiniz. Varsayılan saklama süresi 7 gündür.\n\n"
     "Kayda girecek kişileri bilgilendirmek ve gerekli izinleri almak sizin sorumluluğunuzdadır. "
-    "Kamera Windows izinleriyle engellenmişse bu izinler aşılmaz. F12 tuzağı ve çekimleri durdurur.\n\n"
+    "Kamera Windows izinleriyle engellenmişse bu izinler aşılmaz. Ayarladığınız çıkış tuşu modu ve çekimleri durdurur.\n\n"
     "Bu cihazda etkinlikte fotoğraf çekimini açmak istiyor musunuz?"
 )
 
@@ -71,25 +71,56 @@ def circular_icon(size=64, active=False):
 
 DEFAULTS = {"key_spider": "1", "key_black": "2", "key_lock": "3", "key_exit": "f12",
             "camera_enabled": False, "camera_index": 0, "retention_days": 7,
-            "auto_start": False, "wallpaper": ""}
+            "auto_start": False, "wallpaper": "", "slides": (), "slide_seconds": 5,
+            "desktop_shortcut": False, "mail_enrollment": "", "arming_seconds": 5}
+
+MODIFIERS = ("ctrl", "alt", "shift")
+SPECIAL_HOTKEYS = ("esc", "end", *(f"f{i}" for i in range(1, 13)))
+
+
+def shortcut_parts(value, *, mode=False):
+    *modifiers, key = [part.strip().lower() for part in str(value).strip().split("+")]
+    letter = len(key) == 1 and key.isascii() and key.isalnum()
+    if (not (letter or key in SPECIAL_HOTKEYS)
+            or len(set(modifiers)) != len(modifiers)
+            or any(part not in MODIFIERS for part in modifiers)):
+        raise ValueError("Kısayol için Ctrl, Alt veya Shift ile bir harf, rakam ya da işlev tuşu girin.")
+    if mode and not modifiers:
+        modifiers = ["ctrl"]  # Older settings stored only the final key.
+    if not mode and not modifiers and letter:
+        raise ValueError("Çıkış için F1–F12, Esc veya End ya da Ctrl, Alt veya Shift içeren bir kombinasyon girin.")
+    if set(modifiers) == {"ctrl", "shift"} and key == "esc":
+        raise ValueError("Ctrl + Shift + Esc Windows Görev Yöneticisi için ayrılmıştır.")
+    return frozenset(modifiers), key
+
+
+def shortcut_label(value, *, mode=False):
+    modifiers, key = shortcut_parts(value, mode=mode)
+    return " + ".join([*(name.title() for name in MODIFIERS if name in modifiers), key.upper()])
 
 
 def validate(config):
     values = {key: config.get(key, default) for key, default in DEFAULTS.items()}
-    keys = [str(values[key]).strip().lower() for key in ("key_spider", "key_black", "key_lock")]
-    if any(len(key) != 1 or not key.isascii() or not key.isalnum() for key in keys) or len(set(keys)) != 3:
-        raise ValueError("Mod tuşları farklı tek harf veya rakam olmalıdır.")
-    for name, key in zip(("key_spider", "key_black", "key_lock"), keys):
-        values[name] = key
-    if values["key_exit"] not in ["f"+str(i) for i in range(1, 13)] + ["esc", "end"]:
-        raise ValueError("Geçersiz çıkış tuşu.")
-    for field, low, high in (("camera_index", 0, 9), ("retention_days", 1, 30)):
+    keys = [shortcut_parts(values[name], mode=name != "key_exit")
+            for name in ("key_spider", "key_black", "key_lock", "key_exit")]
+    if len(set(keys)) != len(keys):
+        raise ValueError("Üç mod ile çıkış için birbirinden farklı kısayollar girin.")
+    for name in ("key_spider", "key_black", "key_lock", "key_exit"):
+        values[name] = str(values[name]).strip().lower()
+    for field, low, high in (("camera_index", 0, 9), ("retention_days", 1, 30), ("slide_seconds", 1, 300)):
         if type(values[field]) is not int or not low <= values[field] <= high:
             raise ValueError("Geçersiz kamera veya saklama ayarı.")
-    if any(type(values[field]) is not bool for field in ("camera_enabled", "auto_start")):
+    if type(values["arming_seconds"]) is not int or not 0 <= values["arming_seconds"] <= 30:
+        raise ValueError("Geri sayım için 0 ile 30 arasında bir saniye değeri girin.")
+    if any(type(values[field]) is not bool for field in ("camera_enabled", "auto_start", "desktop_shortcut")):
         raise ValueError("Geçersiz kamera veya başlangıç seçimi.")
     if not isinstance(values["wallpaper"], str):
         raise ValueError("Geçersiz fotoğraf yolu.")
+    if not isinstance(values["mail_enrollment"], str):
+        values["mail_enrollment"] = ""
+    if not isinstance(values["slides"], (list, tuple)) or any(not isinstance(p, str) or not p for p in values["slides"]):
+        raise ValueError("Geçersiz slayt listesi.")
+    values["slides"] = tuple(values["slides"])
     return values
 
 
@@ -107,16 +138,33 @@ def load_config():
 def save_config(config, wallpaper=None):
     values = validate(config)
     if wallpaper:
-        # Keep a private local copy so moving the selected source doesn't break Ctrl+1.
-        with Image.open(wallpaper) as source:
-            from PIL import ImageOps
-            image = ImageOps.exif_transpose(source).convert("RGB")
-            image.thumbnail((7680, 4320), Image.Resampling.LANCZOS)
-            target = data_dir() / "wallpaper.jpg"
-            temporary = data_dir() / "wallpaper.tmp"
-            image.save(temporary, format="JPEG", quality=95)
-            temporary.replace(target)
-            values["wallpaper"] = str(target)
+        from hashlib import sha256
+        from PIL import ImageOps
+        paths = (wallpaper,) if isinstance(wallpaper, (str, os.PathLike)) else wallpaper
+        folder = data_dir() / "slides"
+        folder.mkdir(exist_ok=True)
+        copies = []
+        for path in paths:
+            source_path = Path(path).resolve()
+            if source_path.parent == folder.resolve() and source_path.suffix == ".jpg":
+                target = source_path
+                with Image.open(target) as image:
+                    image.verify()
+            else:
+                data = source_path.read_bytes()
+                target = folder / (sha256(data).hexdigest() + ".jpg")
+                with Image.open(io.BytesIO(data)) as source:
+                    image = ImageOps.exif_transpose(source).convert("RGB")
+                    image.thumbnail((7680, 4320), Image.Resampling.LANCZOS)
+                    temporary = folder / (uuid.uuid4().hex + ".tmp")
+                    try:
+                        image.save(temporary, format="JPEG", quality=95)
+                        temporary.replace(target)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+            if str(target) not in copies:
+                copies.append(str(target))
+        values["wallpaper"], values["slides"] = copies[0], tuple(copies)
     path = config_path()
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(values, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -238,14 +286,14 @@ def show_privacy(parent):
     text.configure(state="disabled")
 
 
-def show_captures(root):
+def show_captures(root, initial_capture=None, store=None):
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
     from PIL import ImageTk
     root.title("Spiderpot · Fotoğraflar")
     root.iconbitmap(str(resource("Assets/spiderpot.ico")))
     root.geometry("980x720")
-    store = CaptureStore()
+    store = CaptureStore() if store is None else store
     store.prune(load_config()["retention_days"])
     ttk.Label(root, text="Şifreli fotoğraflar · Yalnız bu Windows hesabıyla açılır", font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=18, pady=18)
     body = ttk.Frame(root, padding=18)
@@ -294,10 +342,23 @@ def show_captures(root):
             for path in targets:
                 store.delete(path)
             reload()
+    def open_folder():
+        try:
+            os.startfile(str(store.folder))
+        except OSError as error:
+            messagebox.showerror("Klasör açılamadı", str(error), parent=root)
     listing.bind("<<ListboxSelect>>", display)
     actions = ttk.Frame(root, padding=18)
     actions.pack(fill="x")
-    for name, callback in (("Yenile", reload), ("Dışa aktar…", export), ("Seçiliyi sil", delete), ("Tümünü sil", lambda: delete(True)), ("Gizlilik", lambda: show_privacy(root))):
+    for name, callback in (("Yenile", reload), ("Klasörü aç", open_folder), ("Dışa aktar…", export),
+                           ("Seçiliyi sil", delete), ("Tümünü sil", lambda: delete(True)),
+                           ("Gizlilik", lambda: show_privacy(root))):
         ttk.Button(actions, text=name, command=callback).pack(side="left", padx=(0, 9))
     ttk.Label(root, text="Dışa aktarılan JPEG şifrelenmez; uygulamanın otomatik temizliğine dahil değildir.").pack(anchor="w", padx=18, pady=(0, 18))
     reload()
+    for index, path in enumerate(paths):
+        if path.name == initial_capture:
+            listing.selection_set(index)
+            listing.see(index)
+            display()
+            break
