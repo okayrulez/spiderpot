@@ -1,2 +1,3 @@
 cryptography==48.0.1
 qrcode==8.2
+miniupnpc==2.3.3

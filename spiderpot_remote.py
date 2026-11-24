@@ -71,10 +71,13 @@ def host_identity(folder, protect):
     return context, cert.fingerprint(hashes.SHA256()).hex()
 
 
-def encode_pairing(addresses, port, name, pin, code):
+def encode_pairing(addresses, port, name, pin, code, *, local_only=None):
+    fields = {"protocol": BETA_PROTOCOL, "hosts": addresses, "port": port,
+              "name": name[:40], "pin": pin, "code": code}
+    if local_only is not None:
+        fields["localOnly"] = local_only
     payload = json.dumps(
-        {"protocol": BETA_PROTOCOL, "hosts": addresses, "port": port,
-         "name": name[:40], "pin": pin, "code": code},
+        fields,
         separators=(",", ":"), ensure_ascii=False,
     ).encode()
     return QR_PREFIX + base64.urlsafe_b64encode(payload).decode().rstrip("=")
@@ -152,6 +155,7 @@ class DirectHost:
         self.expiry = 0
         self.listener = self._listen(port, bind)
         self.port = self.listener.getsockname()[1]
+        self.supports_ipv6 = self.listener.family == socket.AF_INET6
         threading.Thread(target=self._accept, daemon=True).start()
 
     @staticmethod

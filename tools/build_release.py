@@ -38,7 +38,7 @@ def sdk_tools():
 def licenses(destination):
     destination.mkdir(parents=True,exist_ok=True)
     summaries=[]
-    for name in ('Pillow','numpy','opencv-python-headless','pynput','pystray','screeninfo','six','psutil','winrt-runtime','winrt-Windows.Foundation','winrt-Windows.ApplicationModel','typing_extensions','cryptography','cffi','pycparser','qrcode','colorama'):
+    for name in ('Pillow','numpy','opencv-python-headless','pynput','pystray','screeninfo','six','psutil','winrt-runtime','winrt-Windows.Foundation','winrt-Windows.ApplicationModel','typing_extensions','cryptography','cffi','pycparser','qrcode','colorama','miniupnpc'):
         dist=metadata.distribution(name)
         summaries.append(f'{name} {dist.version}\n{dist.metadata.get("Home-page", "")}\nLicense: {dist.metadata.get("License-Expression",dist.metadata.get("License","See bundled license"))}\n')
         for file in dist.files or []:

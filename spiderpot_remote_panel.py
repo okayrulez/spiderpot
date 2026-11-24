@@ -3,7 +3,10 @@
 import ctypes
 import io
 import ipaddress
+from queue import Empty, SimpleQueue
 import socket
+import threading
+import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -12,26 +15,28 @@ import psutil
 import qrcode
 
 from spiderpot_remote import DirectHost, PORT, checked_host, encode_pairing
+from spiderpot_router import RouterMapping
 from spiderpot_support import crypt, data_dir, resource
 
 
-def available_hosts():
-    candidates = []
+def available_hosts(supports_ipv6):
+    public = []
+    local = []
     stats = psutil.net_if_stats()
     for interface, entries in psutil.net_if_addrs().items():
         if interface not in stats or not stats[interface].isup:
             continue
         for entry in entries:
-            if entry.family not in (socket.AF_INET, socket.AF_INET6):
+            if entry.family != socket.AF_INET and not (supports_ipv6 and entry.family == socket.AF_INET6):
                 continue
             address = ipaddress.ip_address(entry.address.split("%")[0])
-            if address.version == 6 and address in ipaddress.IPv6Network("2000::/3") and address.is_global:
-                candidates.insert(0, str(address))
-            elif address.version == 4 and not (
-                address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified
-            ):
-                candidates.append(str(address))
-    return list(dict.fromkeys(candidates))
+            if address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified:
+                continue
+            if address.is_global and not address.is_reserved:
+                public.append(str(address))
+            elif address.version == 4:
+                local.append(str(address))
+    return list(dict.fromkeys(public)), list(dict.fromkeys(local))
 
 
 class RemotePanel(tk.Toplevel):
@@ -43,6 +48,9 @@ class RemotePanel(tk.Toplevel):
         self.qr_expiry = None
         self.badge_timer = None
         self.image = None
+        self.mapping = None
+        self.mapping_job = None
+        self.mapping_timer = None
         self.title("Spiderpot · Telefon eşleştir")
         self.iconbitmap(str(resource("Assets/spiderpot.ico")))
         self.resizable(False, False)
@@ -55,7 +63,7 @@ class RemotePanel(tk.Toplevel):
         ttk.Label(body, text="Dış bağlantı adresi (isteğe bağlı)").pack(anchor="w")
         self.external = ttk.Entry(body, width=55)
         self.external.pack(fill="x", pady=(3, 5))
-        ttk.Label(body, text=f"Erişilebilir IP veya DNS adı · TCP {PORT}", foreground="#505865").pack(anchor="w")
+        ttk.Label(body, text=f"Mobil veri için erişilebilir IP veya DNS adı · TCP {PORT}", foreground="#505865").pack(anchor="w")
         row = ttk.Frame(body)
         row.pack(fill="x", pady=12)
         self.toggle = ttk.Button(row, text="Erişimi aç", command=self.toggle_host)
@@ -64,6 +72,9 @@ class RemotePanel(tk.Toplevel):
         self.pair.pack(side="left", padx=6)
         self.remove = ttk.Button(row, text="Telefonu kaldır", command=self.forget, state="disabled")
         self.remove.pack(side="left")
+        self.internet = ttk.Button(body, text="Ev modeminde 15 dk dış erişim aç",
+                                   command=self.open_internet, state="disabled")
+        self.internet.pack(anchor="w", pady=(0, 8))
         self.control = tk.BooleanVar(self, False)
         self.control_option = ttk.Checkbutton(body, text="Eşleştirilen telefona fare ve klavye kontrolü ver",
                                               variable=self.control, command=self.update_control, state="disabled")
@@ -89,6 +100,8 @@ class RemotePanel(tk.Toplevel):
         self.toggle.configure(text="Erişimi kapat")
         for widget in (self.pair, self.remove, self.control_option):
             widget.configure(state="normal")
+        if self.mapping_job is None:
+            self.internet.configure(state="normal")
         self.status.configure(text=f"Erişim açık · TCP {PORT}")
         self.show_badge()
 
@@ -133,17 +146,92 @@ class RemotePanel(tk.Toplevel):
         except ValueError as error:
             messagebox.showwarning("Spiderpot", str(error), parent=self)
             return
-        addresses = list(dict.fromkeys(([outside] if outside else []) + available_hosts()))[:8]
+        public, local = available_hosts(self.host.supports_ipv6)
+        mapped = [self.mapping.address] if self.mapping else []
+        addresses = list(dict.fromkeys(([outside] if outside else []) + mapped + public + local))[:8]
         if not addresses:
             self.status.configure(text="Ağ adresi bulunamadı.")
             return
         self.clear_qr()
-        payload = encode_pairing(addresses, self.host.port, socket.gethostname(), self.host.pin, self.host.pairing_code())
+        local_only = not (outside or mapped or public)
+        payload = encode_pairing(addresses, self.host.port, socket.gethostname(), self.host.pin,
+                                 self.host.pairing_code(), local_only=local_only)
         bitmap = qrcode.make(payload, box_size=4, border=4).convert("RGB")
         self.image = ImageTk.PhotoImage(bitmap, master=self)
         self.qr.configure(image=self.image)
-        self.status.configure(text="QR kodunu 2 dakika içinde iPhone ile okut.")
+        network = "Bu QR yerel ağ için. Mobil veri için dış erişim aç." if local_only else (
+            "Dış adres QR’a eklendi. Mobil veriden erişim iPhone’da sınanır."
+        )
+        self.status.configure(text=f"QR kodunu 2 dakika içinde iPhone ile okut. {network}")
         self.qr_expiry = self.after(120000, self.expire_qr)
+
+    def open_internet(self):
+        if self.host is None or self.mapping_job is not None or self.mapping is not None:
+            return
+        if not messagebox.askyesno("Spiderpot · Dış erişim",
+                                   f"Ev modeminde TCP {self.host.port} için en fazla 15 dakikalık "
+                                   "UPnP yönlendirmesi açılsın mı? Durdur düğmesi erişimi kapatır.",
+                                   parent=self):
+            return
+        public, local = available_hosts(False)
+        port = self.host.port
+        cancelled = threading.Event()
+        result = SimpleQueue()
+        self.mapping_job = cancelled
+        self.internet.configure(state="disabled")
+        self.status.configure(text="Ev modemi ve WAN adresi denetleniyor…")
+
+        def work():
+            try:
+                mapping = RouterMapping.open(port, public + local, cancelled)
+                if mapping is not None and cancelled.is_set():
+                    mapping.close()
+                    mapping = None
+                result.put((mapping, ""))
+            except ValueError as error:
+                result.put((None, str(error)))
+            except Exception:
+                result.put((None, "Modem UPnP isteğine yanıt vermedi veya yönlendirmeyi reddetti."))
+
+        def finish():
+            try:
+                mapping, problem = result.get_nowait()
+            except Empty:
+                self.after(100, finish)
+                return
+            self.mapping_job = None
+            if cancelled.is_set() or self.host is None:
+                if mapping is not None:
+                    self.release_mapping(mapping)
+                if self.host is not None:
+                    self.internet.configure(state="normal")
+                return
+            if mapping is None:
+                self.status.configure(text=problem or "Modemde dış erişim açılamadı.")
+                self.internet.configure(state="normal")
+                return
+            self.mapping = mapping
+            self.mapping_timer = self.after(max(0, int((mapping.expires_at - time.monotonic()) * 1000)),
+                                            self.expire_mapping)
+            self.make_qr()
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(100, finish)
+
+    @staticmethod
+    def release_mapping(mapping):
+        def release():
+            try:
+                mapping.close()
+            except Exception:
+                pass  # The router lease will expire even when it is unreachable.
+
+        threading.Thread(target=release, daemon=True).start()
+
+    def expire_mapping(self):
+        self.mapping_timer = None
+        self.stop()
+        self.status.configure(text="Dış erişim süresi doldu. Yeniden başlatmak için Erişimi aç.")
 
     def expire_qr(self):
         self.qr_expiry = None
@@ -161,6 +249,14 @@ class RemotePanel(tk.Toplevel):
 
     def stop(self):
         self.clear_qr()
+        if self.mapping_job is not None:
+            self.mapping_job.set()
+        if self.mapping_timer is not None:
+            self.after_cancel(self.mapping_timer)
+            self.mapping_timer = None
+        if self.mapping is not None:
+            self.release_mapping(self.mapping)
+            self.mapping = None
         if self.host is not None:
             self.host.close()
             self.host = None
@@ -172,7 +268,7 @@ class RemotePanel(tk.Toplevel):
             self.badge = None
         self.control.set(False)
         self.toggle.configure(text="Erişimi aç")
-        for widget in (self.pair, self.remove, self.control_option):
+        for widget in (self.pair, self.remove, self.control_option, self.internet):
             widget.configure(state="disabled")
         self.status.configure(text="Erişim kapalı")
 

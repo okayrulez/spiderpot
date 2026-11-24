@@ -16,7 +16,7 @@ import winreg
 import psutil
 
 PRODUCT_ID = 'okayrulez.spiderpot'
-VERSION = '1.0.13'
+VERSION = '1.0.14'
 LEGACY_NAMES = {'spiderpot.exe', 'spiderpot_sistem.exe'}
 RUN_KEY = r'Software\Microsoft\Windows\CurrentVersion\Run'
 UNINSTALL_KEY = r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Spiderpot'

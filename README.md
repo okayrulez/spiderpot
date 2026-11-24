@@ -2,9 +2,9 @@
 
 Windows için üç masaüstü tuzağı, özelleştirilebilir kısayollar ve isteğe bağlı yerel kamera fotoğrafları.
 
-## Windows x64 · 1.0.13 beta
+## Windows x64 · 1.0.14 beta
 
-[QR eşleştirmeli Windows kurucusunu indir](https://github.com/okayrulez/spiderpot/releases/download/v1.0.13-beta/Spiderpot-1.0.13-Setup.exe) · [Sürüm notları ve SHA-256](https://github.com/okayrulez/spiderpot/releases/tag/v1.0.13-beta)
+[QR eşleştirmeli Windows kurucusunu indir](https://github.com/okayrulez/spiderpot/releases/download/v1.0.14-beta/Spiderpot-1.0.14-Setup.exe) · [Sürüm notları ve SHA-256](https://github.com/okayrulez/spiderpot/releases/tag/v1.0.14-beta)
 
 Kurucuyu çalıştırın. Önceden kurduysanız güncel sürüm aynı Windows kullanıcısının ayarlarını devralır. İlk kurulumda tercihlerinizi seçip **Kaydet ve Devam Et** düğmesine basın.
 
@@ -15,7 +15,7 @@ Kurucuyu çalıştırın. Önceden kurduysanız güncel sürüm aynı Windows ku
 3. **Erişimi aç → QR oluştur** düğmelerine basın. iPhone’da **QR kodunu okut** ile iki dakika geçerli kodu tarayın ve **Bağlan**’a dokunun.
 4. Canlı ekranı gördükten sonra fare ve klavye kullanmak isterseniz PC’de ilgili izni açın. Paylaşımı bitirmek için PC’de **Durdur**’a basın.
 
-Ekran ve giriş verileri iki cihaz arasında doğrudan TLS üzerinden taşınır. 5G’den erişim, telefonun bilgisayarın dış adresine ulaşabilmesini gerektirir. Eşleştirme penceresindeki dış IP veya DNS alanı bu amaçla kullanılabilir.
+Ekran ve giriş verileri iki cihaz arasında doğrudan TLS üzerinden taşınır. Mobil veriden denemek için 1.0.14 ve sonrasında **Ev modeminde 15 dk dış erişim aç** seçeneği kullanılabilir. Genel IPv4 adresi ve süreli UPnP yönlendirmesi destekleyen modemlerde Spiderpot yönlendirmeyi açar ve bağlantı adresini yeni QR’a ekler. Windows güvenlik duvarının TCP bağlantısına izin vermesi gerekir. CGNAT veya çift NAT durumunda dışarıdan ulaşılabilen IPv6, önceden yapılandırılmış bir dış adres ya da iki cihazın da eriştiği özel ağ adresi gerekir.
 
 ## Modlar ve simge
 
